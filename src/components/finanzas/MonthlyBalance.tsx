@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useStore } from '../../store'
 import { useFmt } from '../../hooks/useExchangeRate'
-import type { MonthSection, MonthLineItem, MonthlyFinanceRecord } from '../../types'
+import type { MonthSection, MonthLineItem, MonthlyFinanceRecord, Debt } from '../../types'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
@@ -39,6 +39,16 @@ function monthLabel(ym: string, short = false) {
   return short
     ? d.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' })
     : d.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' })
+}
+
+// ── Filtro de deudas activas por mes ────────────────────────────────────────
+
+function getActiveDebts(debts: Debt[], yearMonth: string): Debt[] {
+  return debts.filter(d => {
+    const startYM = d.startDate ? d.startDate.slice(0, 7) : '0000-00'
+    const endYM = d.endDate ? d.endDate.slice(0, 7) : '9999-99'
+    return startYM <= yearMonth && endYM >= yearMonth
+  })
 }
 
 // ── Motor de recomendaciones ─────────────────────────────────────────────────
@@ -221,12 +231,12 @@ type AnnualRow = { ym: string; label: string; income: number; fixed: number; var
 
 interface AnnualViewProps {
   records: MonthlyFinanceRecord[]
-  debtTotal: number
+  debts: Debt[]
   clp: (n: number) => string
   year: string
 }
 
-function AnnualView({ records, debtTotal, clp, year }: AnnualViewProps) {
+function AnnualView({ records, debts, clp, year }: AnnualViewProps) {
   const months = last13Months().filter(m => m.startsWith(year))
 
   const rows: AnnualRow[] = months.map(ym => {
@@ -235,7 +245,7 @@ function AnnualView({ records, debtTotal, clp, year }: AnnualViewProps) {
     const fixed = r ? r.fixedExpenses.reduce((s, i) => s + i.amount_CLP, 0) : 0
     const variable = r ? r.variableExpenses.reduce((s, i) => s + i.amount_CLP, 0) : 0
     const invest = r ? r.investments.reduce((s, i) => s + i.amount_CLP, 0) : 0
-    const debt = r ? debtTotal : 0
+    const debt = r ? getActiveDebts(debts, ym).reduce((s, d) => s + d.monthlyPayment_CLP, 0) : 0
     const free = income - fixed - variable - debt - invest
     return { ym, label: monthLabel(ym, true), income, fixed, variable, debt, invest, free, hasData: !!r }
   })
@@ -340,7 +350,8 @@ export function MonthlyBalance() {
   const record = monthlyRecords.find(r => r.yearMonth === selectedMonth)
   const hasPrev = monthlyRecords.some(r => r.yearMonth === prevYM(selectedMonth))
 
-  const debtTotal = debts.reduce((s, d) => s + d.monthlyPayment_CLP, 0)
+  const activeDebts = getActiveDebts(debts, selectedMonth)
+  const debtTotal = activeDebts.reduce((s, d) => s + d.monthlyPayment_CLP, 0)
   const emergencyBalance = savings.filter(s => s.type === 'emergency').reduce((s, sv) => s + sv.balance_CLP, 0)
 
   const income = record ? record.incomes.reduce((s, i) => s + i.amount_CLP, 0) : 0
@@ -408,7 +419,7 @@ export function MonthlyBalance() {
 
       {/* Annual view */}
       {showAnnual && (
-        <AnnualView records={monthlyRecords} debtTotal={debtTotal} clp={clp} year={currentYear} />
+        <AnnualView records={monthlyRecords} debts={debts} clp={clp} year={currentYear} />
       )}
 
       {/* Month detail */}
@@ -487,10 +498,10 @@ export function MonthlyBalance() {
                     </span>
                   </div>
                   <div style={{ padding: '12px 20px 14px' }}>
-                    {debts.length === 0 ? (
-                      <p style={{ color: '#94a3b8', fontSize: 13 }}>Sin deudas. Agrégalas en la pestaña "Deudas".</p>
+                    {activeDebts.length === 0 ? (
+                      <p style={{ color: '#94a3b8', fontSize: 13 }}>Sin cuotas activas en {monthLabel(selectedMonth, true)}. {debts.length > 0 ? 'Hay deudas registradas que aún no comienzan o ya terminaron.' : 'Agrégalas en la pestaña "Deudas".'}</p>
                     ) : (
-                      debts.map(d => (
+                      activeDebts.map(d => (
                         <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
                           <span style={{ flex: 2, fontSize: 13, color: '#334155' }}>{d.name}</span>
                           <span style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>{d.institution}</span>
@@ -498,8 +509,13 @@ export function MonthlyBalance() {
                         </div>
                       ))
                     )}
-                    <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 10, marginBottom: 0 }}>
-                      Las deudas se sincronizan automáticamente desde la pestaña "Deudas".
+                    {debts.length > activeDebts.length && activeDebts.length > 0 && (
+                      <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>
+                        {debts.length - activeDebts.length} deuda(s) no aplican en este mes (fecha inicio/término).
+                      </p>
+                    )}
+                    <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, marginBottom: 0 }}>
+                      Solo se incluyen deudas activas en {monthLabel(selectedMonth, true)}.
                     </p>
                   </div>
                 </div>
