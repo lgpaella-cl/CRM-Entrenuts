@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import type {
   Product, Store, StockEntry, SaleRecord, PurchaseOrder,
   IncomeItem, ExpenseItem, ExpenseLog, Debt, SavingsItem, ExchangeRate,
-  MonthLineItem, MonthSection, MonthlyFinanceRecord, BusinessExpense
+  MonthLineItem, MonthSection, MonthlyFinanceRecord, BusinessExpense, DebtInstallment
 } from './types'
 
 function uid() {
@@ -41,6 +41,9 @@ interface AppState {
 
   // Finanzas del negocio
   businessExpenses: BusinessExpense[]
+
+  // Cuotas de deudas
+  debtInstallments: DebtInstallment[]
 
   // ── Productos ──
   addProduct: (data: Omit<Product, 'id' | 'sku' | 'createdAt' | 'updatedAt'>) => void
@@ -103,6 +106,11 @@ interface AppState {
   addBusinessExpense: (data: Omit<BusinessExpense, 'id'>) => void
   updateBusinessExpense: (id: string, data: Partial<BusinessExpense>) => void
   deleteBusinessExpense: (id: string) => void
+
+  // ── Cuotas de deudas ──
+  generateInstallments: (debtId: string, startDate: string, total: number, amount: number) => void
+  toggleInstallmentPaid: (installmentId: string) => void
+  deleteDebtInstallments: (debtId: string) => void
 }
 
 export const useStore = create<AppState>()(
@@ -121,6 +129,7 @@ export const useStore = create<AppState>()(
       exchangeRate: null,
       monthlyRecords: [],
       businessExpenses: [],
+      debtInstallments: [],
 
       // Productos
       addProduct: (data) => {
@@ -249,6 +258,34 @@ export const useStore = create<AppState>()(
       addBusinessExpense: (data) => set(s => ({ businessExpenses: [...s.businessExpenses, { ...data, id: uid() }] })),
       updateBusinessExpense: (id, data) => set(s => ({ businessExpenses: s.businessExpenses.map(e => e.id === id ? { ...e, ...data } : e) })),
       deleteBusinessExpense: (id) => set(s => ({ businessExpenses: s.businessExpenses.filter(e => e.id !== id) })),
+
+      // Cuotas de deudas
+      generateInstallments: (debtId, startDate, total, amount) => set(s => {
+        const existing = s.debtInstallments.filter(i => i.debtId !== debtId)
+        const [y, m, d] = startDate.split('-').map(Number)
+        const newInstallments: DebtInstallment[] = Array.from({ length: total }, (_, n) => {
+          const date = new Date(y, m - 1 + n, d || 1)
+          return {
+            id: uid(), debtId, number: n + 1,
+            dueDate: date.toISOString().split('T')[0],
+            amount_CLP: amount, paid: false,
+          }
+        })
+        return { debtInstallments: [...existing, ...newInstallments] }
+      }),
+
+      toggleInstallmentPaid: (installmentId) => set(s => {
+        const inst = s.debtInstallments.find(i => i.id === installmentId)
+        if (!inst) return s
+        const updated = s.debtInstallments.map(i => i.id === installmentId ? { ...i, paid: !i.paid } : i)
+        const unpaidBalance = updated.filter(i => i.debtId === inst.debtId && !i.paid).reduce((sum, i) => sum + i.amount_CLP, 0)
+        const debts = s.debts.map(d => d.id === inst.debtId ? { ...d, balance_CLP: unpaidBalance } : d)
+        return { debtInstallments: updated, debts }
+      }),
+
+      deleteDebtInstallments: (debtId) => set(s => ({
+        debtInstallments: s.debtInstallments.filter(i => i.debtId !== debtId)
+      })),
     }),
     { name: 'crm-importadora-v1' }
   )

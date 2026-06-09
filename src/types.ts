@@ -101,6 +101,16 @@ export interface Debt {
   startDate: string
   endDate: string              // fecha término estimada
   type: 'mortgage' | 'consumer' | 'credit_card' | 'car' | 'other'
+  totalInstallments?: number   // si se usa sistema de cuotas
+}
+
+export interface DebtInstallment {
+  id: string
+  debtId: string
+  number: number       // #1, #2, …
+  dueDate: string      // "2026-08-01"
+  amount_CLP: number
+  paid: boolean
 }
 
 export interface SavingsItem {
