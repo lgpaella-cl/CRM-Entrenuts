@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Plus, Trash2, TrendingUp, Info, DollarSign, BarChart2, Percent } from 'lucide-react'
+import { Plus, Trash2, TrendingUp, Info, DollarSign, BarChart2, Percent, FileDown } from 'lucide-react'
 import { useStore } from '../../store'
 import { useFmt } from '../../hooks/useExchangeRate'
+import { downloadCSV } from '../../utils/csvExport'
 
 function currentYearMonth() {
   return new Date().toISOString().slice(0, 7)
@@ -150,6 +151,25 @@ export function BusinessFinanceTab() {
     moreMonths.push(d.toISOString().slice(0, 7))
   }
 
+  function exportPL() {
+    const headers = ['Concepto', 'Valor CLP']
+    const rows: (string | number)[][] = [
+      ['Ventas totales', totalRevenue],
+      ['Costo importación (FOB)', -totalCOGS],
+      ['Comisiones PdV', -totalCommissions],
+      ['Margen bruto', grossProfit],
+      ['Margen bruto %', `${grossMarginPct.toFixed(1)}%`],
+      ...periodExpenses.map(e => [e.name, -e.amount_CLP]),
+      ['Total gastos operacionales', -totalOpEx],
+      ['EBITDA', ebitda],
+      ['EBITDA %', `${ebitdaPct.toFixed(1)}%`],
+      [`Impuesto (${taxPct}%)`, -tax],
+      ['Utilidad neta estimada', netProfit],
+      ['Utilidad neta %', `${netMarginPct.toFixed(1)}%`],
+    ]
+    downloadCSV(`estado-resultados-${yearMonth}.csv`, headers, rows)
+  }
+
   /* ── Render ──────────────────────────────────────────────────── */
   return (
     <div>
@@ -160,6 +180,9 @@ export function BusinessFinanceTab() {
           <p className="text-sm text-gray-500 mt-0.5">Resultado del negocio mes a mes</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={exportPL}>
+            <FileDown size={13} /> Exportar P&L
+          </button>
           <select className="input" style={{ maxWidth: 180 }} value={yearMonth} onChange={e => setYearMonth(e.target.value)}>
             {moreMonths.map(m => (
               <option key={m} value={m}>{formatYearMonth(m)}</option>

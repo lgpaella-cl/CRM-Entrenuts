@@ -1,3 +1,8 @@
+export interface AppSettings {
+  businessName: string
+  darkMode: boolean
+}
+
 export interface Product {
   id: string
   sku: string

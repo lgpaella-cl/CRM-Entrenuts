@@ -3,7 +3,8 @@ import { persist } from 'zustand/middleware'
 import type {
   Product, Store, StockEntry, SaleRecord, PurchaseOrder,
   IncomeItem, ExpenseItem, ExpenseLog, Debt, SavingsItem, ExchangeRate,
-  MonthLineItem, MonthSection, MonthlyFinanceRecord, BusinessExpense, DebtInstallment
+  MonthLineItem, MonthSection, MonthlyFinanceRecord, BusinessExpense, DebtInstallment,
+  AppSettings
 } from './types'
 
 function uid() {
@@ -19,6 +20,10 @@ function generateSKU(name: string, existing: Product[]): string {
 // ── Store shape ──────────────────────────────────────────────────
 
 interface AppState {
+  // Settings
+  settings: AppSettings
+  updateSettings: (data: Partial<AppSettings>) => void
+
   // Importadora
   products: Product[]
   stores: Store[]
@@ -111,11 +116,15 @@ interface AppState {
   generateInstallments: (debtId: string, startDate: string, total: number, amount: number) => void
   toggleInstallmentPaid: (installmentId: string) => void
   deleteDebtInstallments: (debtId: string) => void
+
+  // ── Recibir stock de orden ──
+  receiveStock: (productId: string, storeId: string, qty: number) => void
 }
 
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
+      settings: { businessName: 'CRM Control', darkMode: false },
       products: [],
       stores: [],
       stock: [],
@@ -130,6 +139,9 @@ export const useStore = create<AppState>()(
       monthlyRecords: [],
       businessExpenses: [],
       debtInstallments: [],
+
+      // Settings
+      updateSettings: (data) => set(s => ({ settings: { ...s.settings, ...data } })),
 
       // Productos
       addProduct: (data) => {
@@ -286,6 +298,26 @@ export const useStore = create<AppState>()(
       deleteDebtInstallments: (debtId) => set(s => ({
         debtInstallments: s.debtInstallments.filter(i => i.debtId !== debtId)
       })),
+
+      receiveStock: (productId, storeId, qty) => set(s => {
+        const existing = s.stock.find(e => e.productId === productId && e.storeId === storeId)
+        if (existing) {
+          return {
+            stock: s.stock.map(e =>
+              e.productId === productId && e.storeId === storeId
+                ? { ...e, quantity: e.quantity + qty, updatedAt: new Date().toISOString() }
+                : e
+            )
+          }
+        }
+        return {
+          stock: [...s.stock, {
+            id: uid(), productId, storeId,
+            quantity: qty, minStock: 5, costPrice_CLP: 0, salePrice_CLP: 0,
+            updatedAt: new Date().toISOString()
+          }]
+        }
+      }),
     }),
     { name: 'crm-importadora-v1' }
   )

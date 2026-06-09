@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Plus, Minus, ShoppingCart, Trash2, TrendingUp, Clock, CheckCircle } from 'lucide-react'
+import { Plus, Minus, ShoppingCart, Trash2, TrendingUp, Clock, CheckCircle, FileDown } from 'lucide-react'
 import { useStore } from '../../store'
 import { useFmt } from '../../hooks/useExchangeRate'
 import { ConfirmDialog } from '../shared/ConfirmDialog'
+import { downloadCSV } from '../../utils/csvExport'
 
 function today() { return new Date().toISOString().split('T')[0] }
 
@@ -101,6 +102,26 @@ export function SalesTab() {
     if (!prod || !sale.salePrice_CLP) return null
     const cost = usdToClp(prod.costFOB_USD)
     return ((sale.salePrice_CLP - cost) / sale.salePrice_CLP) * 100
+  }
+
+  function exportSalesCSV() {
+    const headers = ['Fecha', 'Producto', 'SKU', 'Punto de Venta', 'Cantidad', 'Precio Unitario', 'Total', 'Margen%']
+    const rows = filtered.map(sale => {
+      const prod = products.find(p => p.id === sale.productId)
+      const store = stores.find(s => s.id === sale.storeId)
+      const margin = getSaleMargin(sale)
+      return [
+        new Date(sale.date + 'T12:00:00').toLocaleDateString('es-CL'),
+        prod?.name ?? '—',
+        prod?.sku ?? '—',
+        store?.name ?? '—',
+        sale.quantity,
+        sale.salePrice_CLP,
+        sale.quantity * sale.salePrice_CLP,
+        margin !== null ? margin.toFixed(1) : '—',
+      ] as (string | number)[]
+    })
+    downloadCSV(`ventas-${new Date().toISOString().split('T')[0]}.csv`, headers, rows)
   }
 
   /* ── Render ──────────────────────────────────────────────────── */
@@ -349,7 +370,7 @@ export function SalesTab() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
             <select className="input" style={{ maxWidth: 220 }} value={filterStore} onChange={e => setFilterStore(e.target.value)}>
               <option value="all">Todos los PdV</option>
               {activeStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -358,6 +379,11 @@ export function SalesTab() {
               <option value="all">Todos los productos</option>
               {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
+            {filtered.length > 0 && (
+              <button className="btn btn-secondary" style={{ marginLeft: 'auto' }} onClick={exportSalesCSV}>
+                <FileDown size={14} /> Exportar CSV
+              </button>
+            )}
           </div>
 
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
