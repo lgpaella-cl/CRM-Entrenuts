@@ -124,7 +124,7 @@ interface AppState {
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
-      settings: { businessName: 'CRM Control', darkMode: false },
+      settings: { businessName: 'CRM Control', darkMode: false, availableBalance_CLP: 0 },
       products: [],
       stores: [],
       stock: [],

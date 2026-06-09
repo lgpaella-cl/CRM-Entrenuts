@@ -1,6 +1,7 @@
 export interface AppSettings {
   businessName: string
   darkMode: boolean
+  availableBalance_CLP: number   // saldo disponible en cuenta (actualizable desde dashboard)
 }
 
 export interface Product {
