@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import type {
   Product, Store, StockEntry, SaleRecord, PurchaseOrder,
   IncomeItem, ExpenseItem, ExpenseLog, Debt, SavingsItem, ExchangeRate,
-  MonthLineItem, MonthSection, MonthlyFinanceRecord
+  MonthLineItem, MonthSection, MonthlyFinanceRecord, BusinessExpense
 } from './types'
 
 function uid() {
@@ -38,6 +38,9 @@ interface AppState {
 
   // Balance mensual
   monthlyRecords: MonthlyFinanceRecord[]
+
+  // Finanzas del negocio
+  businessExpenses: BusinessExpense[]
 
   // ── Productos ──
   addProduct: (data: Omit<Product, 'id' | 'sku' | 'createdAt' | 'updatedAt'>) => void
@@ -95,6 +98,11 @@ interface AppState {
   addMonthItem: (recordId: string, section: MonthSection, item: Omit<MonthLineItem, 'id'>) => void
   updateMonthItem: (recordId: string, section: MonthSection, itemId: string, name: string, amount: number) => void
   deleteMonthItem: (recordId: string, section: MonthSection, itemId: string) => void
+
+  // ── Gastos del negocio ──
+  addBusinessExpense: (data: Omit<BusinessExpense, 'id'>) => void
+  updateBusinessExpense: (id: string, data: Partial<BusinessExpense>) => void
+  deleteBusinessExpense: (id: string) => void
 }
 
 export const useStore = create<AppState>()(
@@ -112,6 +120,7 @@ export const useStore = create<AppState>()(
       savings: [],
       exchangeRate: null,
       monthlyRecords: [],
+      businessExpenses: [],
 
       // Productos
       addProduct: (data) => {
@@ -136,7 +145,7 @@ export const useStore = create<AppState>()(
         if (existing) {
           return { stock: s.stock.map(e => e.productId === productId && e.storeId === storeId ? { ...e, ...data, updatedAt: new Date().toISOString() } : e) }
         }
-        return { stock: [...s.stock, { id: uid(), productId, storeId, quantity: 0, minStock: 5, salePrice_CLP: 0, ...data, updatedAt: new Date().toISOString() }] }
+        return { stock: [...s.stock, { id: uid(), productId, storeId, quantity: 0, minStock: 5, costPrice_CLP: 0, salePrice_CLP: 0, ...data, updatedAt: new Date().toISOString() }] }
       }),
 
       // Ventas
@@ -235,6 +244,11 @@ export const useStore = create<AppState>()(
           r.id === recordId ? { ...r, [section]: r[section].filter(i => i.id !== itemId) } : r
         )
       })),
+
+      // Gastos del negocio
+      addBusinessExpense: (data) => set(s => ({ businessExpenses: [...s.businessExpenses, { ...data, id: uid() }] })),
+      updateBusinessExpense: (id, data) => set(s => ({ businessExpenses: s.businessExpenses.map(e => e.id === id ? { ...e, ...data } : e) })),
+      deleteBusinessExpense: (id) => set(s => ({ businessExpenses: s.businessExpenses.filter(e => e.id !== id) })),
     }),
     { name: 'crm-importadora-v1' }
   )

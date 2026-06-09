@@ -20,6 +20,7 @@ export interface Store {
   contactName: string
   contactPhone: string
   active: boolean
+  commissionPct?: number   // % de comisión que cobra el PdV sobre la venta
 }
 
 export interface StockEntry {
@@ -27,8 +28,9 @@ export interface StockEntry {
   productId: string
   storeId: string
   quantity: number
-  minStock: number      // stock mínimo para alerta
-  salePrice_CLP: number // precio de venta en esta tienda
+  minStock: number       // stock mínimo para alerta
+  costPrice_CLP?: number // precio al que yo le entrego el producto al PdV
+  salePrice_CLP: number  // precio de venta al público en este PdV
   updatedAt: string
 }
 
@@ -110,6 +112,16 @@ export interface SavingsItem {
   type: 'savings' | 'investment' | 'emergency' | 'retirement'
   institution: string
   notes?: string
+}
+
+// ── Finanzas del Negocio ────────────────────────────────────────
+
+export interface BusinessExpense {
+  id: string
+  name: string
+  amount_CLP: number
+  category: 'fixed' | 'variable' | 'other'
+  yearMonth: string   // "2026-06"
 }
 
 export interface ExchangeRate {

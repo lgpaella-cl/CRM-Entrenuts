@@ -2,29 +2,31 @@ import { useState, useRef } from 'react'
 import { useExchangeRate } from './hooks/useExchangeRate'
 import { DashboardImportadora } from './components/importadora/DashboardImportadora'
 import { ProductsTab } from './components/importadora/ProductsTab'
-import { StoresTab } from './components/importadora/StoresTab'
+import { PuntosDeVentaTab } from './components/importadora/PuntosDeVentaTab'
 import { InventoryTab } from './components/importadora/InventoryTab'
 import { SalesTab } from './components/importadora/SalesTab'
 import { ProjectionTab } from './components/importadora/ProjectionTab'
+import { BusinessFinanceTab } from './components/importadora/BusinessFinanceTab'
 import { MonthlyBalance } from './components/finanzas/MonthlyBalance'
 import { DebtsTab } from './components/finanzas/DebtsTab'
 import { SavingsTab } from './components/finanzas/SavingsTab'
 import { ExpenseLogTab } from './components/finanzas/ExpenseLogTab'
 import { CashflowProjection } from './components/finanzas/CashflowProjection'
-import { BarChart2, Package, Store, Grid3X3, TrendingUp, TrendingDown, CreditCard, PiggyBank, Receipt, LineChart, Building2, Wallet, Download, Upload } from 'lucide-react'
+import { BarChart2, Package, MapPin, Grid3X3, TrendingUp, TrendingDown, CreditCard, PiggyBank, Receipt, LineChart, Building2, Wallet, Download, Upload, DollarSign } from 'lucide-react'
 import './index.css'
 
 type MainTab = 'importadora' | 'finanzas'
-type ImportadoraSubTab = 'dashboard' | 'products' | 'stores' | 'inventory' | 'sales' | 'projection'
+type ImportadoraSubTab = 'dashboard' | 'products' | 'stores' | 'inventory' | 'sales' | 'projection' | 'bizfinance'
 type FinanzasSubTab = 'incomes' | 'logs' | 'debts' | 'savings' | 'projection'
 
 const importadoraTabs: { id: ImportadoraSubTab; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard', label: 'Resumen', icon: <BarChart2 size={15} /> },
   { id: 'products', label: 'Productos', icon: <Package size={15} /> },
-  { id: 'stores', label: 'Tiendas', icon: <Store size={15} /> },
+  { id: 'stores', label: 'Puntos de Venta', icon: <MapPin size={15} /> },
   { id: 'inventory', label: 'Inventario', icon: <Grid3X3 size={15} /> },
   { id: 'sales', label: 'Ventas', icon: <TrendingUp size={15} /> },
   { id: 'projection', label: 'Proyección stock', icon: <TrendingDown size={15} /> },
+  { id: 'bizfinance', label: 'Estado Result.', icon: <DollarSign size={15} /> },
 ]
 
 const finanzasTabs: { id: FinanzasSubTab; label: string; icon: React.ReactNode }[] = [
@@ -93,7 +95,7 @@ export default function App() {
             onClick={() => setMainTab('importadora')}
             style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, transition: 'all 0.15s', background: mainTab === 'importadora' ? '#3b82f6' : 'transparent', color: mainTab === 'importadora' ? 'white' : '#94a3b8' }}
           >
-            <Building2 size={15} /> Importadora
+            <Building2 size={15} /> Control Inventario
           </button>
           <button
             onClick={() => setMainTab('finanzas')}
@@ -152,10 +154,11 @@ export default function App() {
             <>
               {importadoraTab === 'dashboard' && <DashboardImportadora />}
               {importadoraTab === 'products' && <ProductsTab />}
-              {importadoraTab === 'stores' && <StoresTab />}
+              {importadoraTab === 'stores' && <PuntosDeVentaTab />}
               {importadoraTab === 'inventory' && <InventoryTab />}
               {importadoraTab === 'sales' && <SalesTab />}
               {importadoraTab === 'projection' && <ProjectionTab />}
+              {importadoraTab === 'bizfinance' && <BusinessFinanceTab />}
             </>
           )}
           {mainTab === 'finanzas' && (
