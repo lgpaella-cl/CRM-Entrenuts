@@ -152,6 +152,7 @@ export interface MonthLineItem {
   id: string
   name: string
   amount_CLP: number
+  category?: ExpenseItem['category']   // opcional — para gastos fijos y variables
 }
 
 export type MonthSection = 'incomes' | 'fixedExpenses' | 'variableExpenses' | 'investments'

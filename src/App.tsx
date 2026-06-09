@@ -14,11 +14,11 @@ import { DashboardFinanzas } from './components/finanzas/DashboardFinanzas'
 import { MonthlyBalance } from './components/finanzas/MonthlyBalance'
 import { DebtsTab } from './components/finanzas/DebtsTab'
 import { SavingsTab } from './components/finanzas/SavingsTab'
-import { ExpenseLogTab } from './components/finanzas/ExpenseLogTab'
+// ExpenseLogTab removed — data lives in monthlyRecords now
 import { CashflowProjection } from './components/finanzas/CashflowProjection'
 import {
   BarChart2, Package, MapPin, Grid3X3, TrendingUp, TrendingDown,
-  CreditCard, PiggyBank, Receipt, LineChart, Building2, Wallet,
+  CreditCard, PiggyBank, LineChart, Building2, Wallet,
   Download, Upload, DollarSign, Moon, Sun, Bell, Search, X,
   ClipboardList, LayoutDashboard, Menu
 } from 'lucide-react'
@@ -26,7 +26,7 @@ import './index.css'
 
 type MainTab = 'importadora' | 'finanzas'
 type ImportadoraSubTab = 'dashboard' | 'products' | 'stores' | 'inventory' | 'sales' | 'projection' | 'bizfinance' | 'orders' | 'pdvanalysis'
-type FinanzasSubTab = 'dashboard' | 'incomes' | 'logs' | 'debts' | 'savings' | 'projection'
+type FinanzasSubTab = 'dashboard' | 'incomes' | 'debts' | 'savings' | 'projection'
 
 const importadoraTabs: { id: ImportadoraSubTab; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard', label: 'Resumen', icon: <BarChart2 size={15} /> },
@@ -43,7 +43,6 @@ const importadoraTabs: { id: ImportadoraSubTab; label: string; icon: React.React
 const finanzasTabs: { id: FinanzasSubTab; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard', label: 'Resumen', icon: <LayoutDashboard size={15} /> },
   { id: 'incomes', label: 'Ingresos & Gastos', icon: <Wallet size={15} /> },
-  { id: 'logs', label: 'Registro gastos', icon: <Receipt size={15} /> },
   { id: 'debts', label: 'Deudas', icon: <CreditCard size={15} /> },
   { id: 'savings', label: 'Ahorros & Inversiones', icon: <PiggyBank size={15} /> },
   { id: 'projection', label: 'Flujo 5 años', icon: <LineChart size={15} /> },
@@ -440,7 +439,6 @@ export default function App() {
             <>
               {finanzasTab === 'dashboard' && <DashboardFinanzas />}
               {finanzasTab === 'incomes' && <MonthlyBalance />}
-              {finanzasTab === 'logs' && <ExpenseLogTab />}
               {finanzasTab === 'debts' && <DebtsTab />}
               {finanzasTab === 'savings' && <SavingsTab />}
               {finanzasTab === 'projection' && <CashflowProjection />}

@@ -7,6 +7,7 @@ import type {
   AppSettings
 } from './types'
 
+
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
 }
@@ -105,6 +106,7 @@ interface AppState {
   deleteMonthlyRecord: (id: string) => void
   addMonthItem: (recordId: string, section: MonthSection, item: Omit<MonthLineItem, 'id'>) => void
   updateMonthItem: (recordId: string, section: MonthSection, itemId: string, name: string, amount: number) => void
+  updateMonthItemCategory: (recordId: string, section: MonthSection, itemId: string, category: ExpenseItem['category']) => void
   deleteMonthItem: (recordId: string, section: MonthSection, itemId: string) => void
 
   // ── Gastos del negocio ──
@@ -256,6 +258,14 @@ export const useStore = create<AppState>()(
         monthlyRecords: s.monthlyRecords.map(r =>
           r.id === recordId
             ? { ...r, [section]: r[section].map(i => i.id === itemId ? { ...i, name, amount_CLP: amount } : i) }
+            : r
+        )
+      })),
+
+      updateMonthItemCategory: (recordId, section, itemId, category) => set(s => ({
+        monthlyRecords: s.monthlyRecords.map(r =>
+          r.id === recordId
+            ? { ...r, [section]: r[section].map(i => i.id === itemId ? { ...i, category } : i) }
             : r
         )
       })),

@@ -5,45 +5,29 @@ import {
 } from 'lucide-react'
 import { useStore } from '../../store'
 import { useFmt } from '../../hooks/useExchangeRate'
-import type { ExpenseItem } from '../../types'
+import { EXPENSE_CATEGORIES, getCatInfo } from '../../utils/categories'
 
-// ── Constants ────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const MONTH_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
-const CATEGORIES: { value: ExpenseItem['category']; label: string; color: string; emoji: string }[] = [
-  { value: 'housing',       label: 'Vivienda',        color: '#6366f1', emoji: '🏠' },
-  { value: 'transport',     label: 'Transporte',      color: '#f59e0b', emoji: '🚗' },
-  { value: 'food',          label: 'Alimentación',    color: '#10b981', emoji: '🍽️' },
-  { value: 'health',        label: 'Salud',           color: '#ef4444', emoji: '🏥' },
-  { value: 'education',     label: 'Educación',       color: '#3b82f6', emoji: '📚' },
-  { value: 'entertainment', label: 'Entretenimiento', color: '#ec4899', emoji: '🎬' },
-  { value: 'subscriptions', label: 'Suscripciones',   color: '#8b5cf6', emoji: '📱' },
-  { value: 'business',      label: 'Negocio',         color: '#0ea5e9', emoji: '💼' },
-  { value: 'other',         label: 'Otro',            color: '#94a3b8', emoji: '📦' },
-]
-
-// ── Helpers ──────────────────────────────────────────────────────
-
 function sumItems(items: { amount_CLP: number }[]) {
   return items.reduce((s, i) => s + i.amount_CLP, 0)
 }
-
-function currentYM() {
-  return new Date().toISOString().slice(0, 7)
+function currentYM() { return new Date().toISOString().slice(0, 7) }
+function prevYM(ym: string): string {
+  const [y, m] = ym.split('-').map(Number)
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
 }
-
 function nextYM(ym: string): string {
   const [y, m] = ym.split('-').map(Number)
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
 }
-
 function labelYM(ym: string) {
   const [y, m] = ym.split('-')
   return `${MONTH_SHORT[parseInt(m) - 1]} ${y}`
 }
-
 function fullLabelYM(ym: string) {
   const [y, m] = ym.split('-')
   return `${MONTH_NAMES[parseInt(m) - 1]} ${y}`
@@ -54,82 +38,96 @@ function fullLabelYM(ym: string) {
 export function DashboardFinanzas() {
   const {
     monthlyRecords, debts, savings, debtInstallments,
-    expenseLogs, settings, updateSettings,
+    settings, updateSettings,
   } = useStore()
   const { clp } = useFmt()
 
   const [selectedYM, setSelectedYM] = useState(currentYM())
   const [catView, setCatView] = useState<'month' | 'year'>('month')
+  const [catFilter, setCatFilter] = useState<string>('all')
   const [expandedCat, setExpandedCat] = useState<string | null>(null)
   const [editingBalance, setEditingBalance] = useState(false)
   const [balanceInput, setBalanceInput] = useState('')
 
-  // ── Month selector options (last 12 months) ──
+  // Month selector options (last 12)
   const allMonths: string[] = []
   for (let i = 11; i >= 0; i--) {
     const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i)
     allMonths.push(d.toISOString().slice(0, 7))
   }
 
-  // ── Monthly record for selected month ──
+  // ── Selected month record ──
   const sorted = [...monthlyRecords].sort((a, b) => b.yearMonth.localeCompare(a.yearMonth))
-  const record = monthlyRecords.find(r => r.yearMonth === selectedYM) ?? sorted[0]
+  const record    = monthlyRecords.find(r => r.yearMonth === selectedYM) ?? sorted[0]
+  const prevRecord = monthlyRecords.find(r => r.yearMonth === prevYM(record?.yearMonth ?? selectedYM))
 
-  const monthlyIncome      = record ? sumItems(record.incomes) : 0
-  const monthlyFixed       = record ? sumItems(record.fixedExpenses) : 0
-  const monthlyVariable    = record ? sumItems(record.variableExpenses) : 0
-  const monthlyInvestments = record ? sumItems(record.investments) : 0
+  const monthlyIncome   = record ? sumItems(record.incomes) : 0
+  const monthlyFixed    = record ? sumItems(record.fixedExpenses) : 0
+  const monthlyVariable = record ? sumItems(record.variableExpenses) : 0
 
-  // Debt installments for selected month
+  // Cuotas del mes seleccionado
   const monthlyDebtPayments = debtInstallments
-    .filter(i => i.dueDate.startsWith(selectedYM))
+    .filter(i => i.dueDate.startsWith(record?.yearMonth ?? selectedYM))
     .reduce((s, i) => s + i.amount_CLP, 0)
 
-  const totalExpenses = monthlyFixed + monthlyVariable + monthlyInvestments + monthlyDebtPayments
-  const freeFlow      = monthlyIncome - totalExpenses
+  const freeFlow = monthlyIncome - monthlyFixed - monthlyVariable - monthlyDebtPayments
 
   // Totals
   const totalDebt    = debts.reduce((s, d) => s + d.balance_CLP, 0)
   const totalSavings = savings.reduce((s, sv) => s + sv.balance_CLP, 0)
 
   // ── Proyección próximo mes ──
-  const nm = nextYM(selectedYM)
+  const nm = nextYM(record?.yearMonth ?? selectedYM)
 
-  // Average variable expenses (expenseLogs) from last 3 months
-  const last3Totals = [0, 1, 2].map(n => {
-    const d = new Date(selectedYM + '-01'); d.setMonth(d.getMonth() - n)
-    const ym = d.toISOString().slice(0, 7)
-    return expenseLogs.filter(l => l.date.startsWith(ym)).reduce((s, l) => s + l.amount_CLP, 0)
-  })
-  const avgVarExpenses = last3Totals.reduce((a, b) => a + b, 0) / 3
+  // Variable del mes ANTERIOR (no promedio)
+  const prevVariable = prevRecord ? sumItems(prevRecord.variableExpenses) : monthlyVariable
 
+  // Cuotas del próximo mes
   const nextMonthInstallments = debtInstallments
     .filter(i => !i.paid && i.dueDate.startsWith(nm))
     .reduce((s, i) => s + i.amount_CLP, 0)
 
-  const projectedNeeds    = monthlyFixed + avgVarExpenses + monthlyInvestments + nextMonthInstallments
+  const projectedNeeds    = monthlyFixed + prevVariable + nextMonthInstallments
   const projectedFreeFlow = monthlyIncome - projectedNeeds
 
   const availableBalance = settings.availableBalance_CLP ?? 0
   const financialGap     = availableBalance - projectedNeeds
 
-  // ── Expense categories (from ExpenseLog) ──
-  const catLogs = catView === 'month'
-    ? expenseLogs.filter(l => l.date.startsWith(selectedYM))
-    : expenseLogs.filter(l => l.date.startsWith(selectedYM.slice(0, 4)))
+  // ── Gastos por categoría (desde monthlyRecords, NO expenseLogs) ──
+  // Tomamos fixedExpenses + variableExpenses con su campo category
+  const catSourceRecords = catView === 'month'
+    ? (record ? [record] : [])
+    : monthlyRecords.filter(r => r.yearMonth.startsWith(selectedYM.slice(0, 4)))
 
-  const totalCatSpend = catLogs.reduce((s, l) => s + l.amount_CLP, 0)
+  const allExpenseItems = catSourceRecords.flatMap(r => [
+    ...r.fixedExpenses.map(i => ({ ...i, section: 'fixed' as const })),
+    ...r.variableExpenses.map(i => ({ ...i, section: 'variable' as const })),
+  ])
 
-  const catData = CATEGORIES
+  const totalCatSpend = allExpenseItems.reduce((s, i) => s + i.amount_CLP, 0)
+
+  // Categorías presentes
+  const catData = EXPENSE_CATEGORIES
     .map(c => ({
       ...c,
-      total: catLogs.filter(l => l.category === c.value).reduce((s, l) => s + l.amount_CLP, 0),
-      items: catLogs.filter(l => l.category === c.value).sort((a, b) => b.amount_CLP - a.amount_CLP),
+      total: allExpenseItems.filter(i => i.category === c.value).reduce((s, i) => s + i.amount_CLP, 0),
+      items: allExpenseItems.filter(i => i.category === c.value),
     }))
     .filter(c => c.total > 0)
     .sort((a, b) => b.total - a.total)
 
-  // ── Upcoming installments (next 5) ──
+  // Items sin categoría asignada
+  const uncategorized = allExpenseItems.filter(i => !i.category)
+  const uncategorizedTotal = uncategorized.reduce((s, i) => s + i.amount_CLP, 0)
+
+  // Filtered view
+  const filteredItems = catFilter === 'all'
+    ? allExpenseItems
+    : catFilter === 'none'
+      ? uncategorized
+      : allExpenseItems.filter(i => i.category === catFilter)
+
+  // ── Upcoming installments ──
   const today = new Date().toISOString().split('T')[0]
   const upcoming = debtInstallments
     .filter(i => !i.paid && i.dueDate >= today)
@@ -139,32 +137,33 @@ export function DashboardFinanzas() {
   // ── Credit cards ──
   const creditCards = debts.filter(d => d.type === 'credit_card' && d.balance_CLP > 0)
 
-  // ── Handlers ──
   function saveBalance() {
     updateSettings({ availableBalance_CLP: parseFloat(balanceInput) || 0 })
     setEditingBalance(false)
   }
 
-  // ── Render ─────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────
   return (
     <div>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20 }}>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-1)', marginBottom: 3 }}>Resumen Financiero</h2>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Situación general · {record ? fullLabelYM(record.yearMonth) : 'Sin datos'}</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            {record ? `Datos · ${fullLabelYM(record.yearMonth)}` : 'Sin datos — crea un balance en Ingresos & Gastos'}
+          </p>
         </div>
         <select className="input" style={{ maxWidth: 165 }} value={selectedYM} onChange={e => setSelectedYM(e.target.value)}>
           {allMonths.map(m => <option key={m} value={m}>{labelYM(m)}</option>)}
         </select>
       </div>
 
-      {/* ── 4 stat cards ── */}
+      {/* 4 stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 16 }}>
         {[
           { label: 'Ingreso mensual',  value: monthlyIncome,  icon: <TrendingUp size={18} />,  color: '#16a34a', bg: '#dcfce7' },
-          { label: 'Gastos totales',   value: totalExpenses,  icon: <TrendingDown size={18} />, color: '#dc2626', bg: '#fee2e2' },
+          { label: 'Gastos del mes',   value: monthlyFixed + monthlyVariable + monthlyDebtPayments, icon: <TrendingDown size={18} />, color: '#dc2626', bg: '#fee2e2' },
           { label: 'Deuda total',      value: totalDebt,      icon: <CreditCard size={18} />,   color: '#d97706', bg: '#fef9c3' },
           { label: 'Patrimonio',       value: totalSavings,   icon: <PiggyBank size={18} />,    color: '#1d4ed8', bg: '#dbeafe' },
         ].map((c, i) => (
@@ -178,7 +177,7 @@ export function DashboardFinanzas() {
         ))}
       </div>
 
-      {/* ── Flujo libre banner ── */}
+      {/* Flujo libre banner */}
       <div style={{
         background: freeFlow >= 0 ? '#f0fdf4' : '#fef2f2',
         border: `1.5px solid ${freeFlow >= 0 ? '#bbf7d0' : '#fecaca'}`,
@@ -187,19 +186,19 @@ export function DashboardFinanzas() {
       }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 14, color: freeFlow >= 0 ? '#15803d' : '#dc2626' }}>
-            Flujo libre del mes · {record ? fullLabelYM(record.yearMonth) : '—'}
+            Flujo libre · {record ? fullLabelYM(record.yearMonth) : '—'}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
-            Ingresos {clp(monthlyIncome)} − Gastos fijos {clp(monthlyFixed)} − Variables {clp(monthlyVariable)} − Inversiones {clp(monthlyInvestments)} − Cuotas {clp(monthlyDebtPayments)}
+            Ingresos {clp(monthlyIncome)} − Fijos {clp(monthlyFixed)} − Variables {clp(monthlyVariable)} − Cuotas {clp(monthlyDebtPayments)}
           </div>
         </div>
         <div style={{ fontSize: 26, fontWeight: 900, color: freeFlow >= 0 ? '#15803d' : '#dc2626' }}>{clp(freeFlow)}</div>
       </div>
 
-      {/* ── Row: Proyección + Gastos por categoría ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, marginBottom: 16 }}>
+      {/* Row: Proyección + Gastos por categoría */}
+      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16, marginBottom: 16 }}>
 
-        {/* Proyección mes siguiente */}
+        {/* Proyección próximo mes */}
         <div className="card" style={{ padding: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-1)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Calendar size={15} /> Proyección · {labelYM(nm)}
@@ -213,13 +212,9 @@ export function DashboardFinanzas() {
             {editingBalance ? (
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
-                  className="input"
-                  type="number"
-                  autoFocus
-                  value={balanceInput}
-                  onChange={e => setBalanceInput(e.target.value)}
-                  placeholder="0"
-                  style={{ flex: 1, fontSize: 17, fontWeight: 700 }}
+                  className="input" type="number" autoFocus
+                  value={balanceInput} onChange={e => setBalanceInput(e.target.value)}
+                  placeholder="0" style={{ flex: 1, fontSize: 17, fontWeight: 700 }}
                   onKeyDown={e => { if (e.key === 'Enter') saveBalance() }}
                 />
                 <button className="btn btn-primary" style={{ padding: '6px 10px' }} onClick={saveBalance}>
@@ -231,33 +226,30 @@ export function DashboardFinanzas() {
                 onClick={() => { setBalanceInput(String(availableBalance || '')); setEditingBalance(true) }}
               >
                 <div style={{ fontSize: 21, fontWeight: 800, color: availableBalance > 0 ? '#16a34a' : 'var(--text-muted)', flex: 1 }}>
-                  {availableBalance > 0 ? clp(availableBalance) : 'Ingresar saldo...'}
+                  {availableBalance > 0 ? clp(availableBalance) : 'Click para ingresar...'}
                 </div>
                 <Pencil size={13} color="var(--text-muted)" />
               </div>
             )}
           </div>
 
-          {/* Desglose proyección */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 12 }}>
+          {/* Desglose */}
+          <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 12 }}>
             {[
-              { label: 'Ingreso estimado',           value: monthlyIncome,             sign: '+', color: '#16a34a' },
-              { label: 'Gastos fijos',               value: monthlyFixed,              sign: '−', color: '#374151' },
-              { label: `Gastos vars (prom 3m)`,      value: Math.round(avgVarExpenses), sign: '−', color: '#6b7280' },
-              { label: 'Inversiones / Ahorro',       value: monthlyInvestments,        sign: '−', color: '#6b7280' },
-              { label: `Cuotas ${labelYM(nm)}`,      value: nextMonthInstallments,     sign: '−', color: '#dc2626' },
+              { label: 'Ingreso estimado',     value: monthlyIncome,           sign: '+', color: '#16a34a' },
+              { label: 'Gastos fijos',         value: monthlyFixed,            sign: '−', color: '#374151' },
+              { label: `Gastos variables (${prevRecord ? labelYM(prevRecord.yearMonth) : 'mes ant.'})`,
+                                               value: prevVariable,            sign: '−', color: '#6b7280' },
+              { label: `Cuotas ${labelYM(nm)}`, value: nextMonthInstallments,  sign: '−', color: '#dc2626' },
             ].map((row, i) => (
-              <div key={i} style={{
-                display: 'flex', justifyContent: 'space-between',
-                padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12.5,
-              }}>
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
                 <span style={{ color: 'var(--text-2)' }}>{row.label}</span>
                 <span style={{ fontWeight: 600, color: row.color }}>{row.sign} {clp(row.value)}</span>
               </div>
             ))}
           </div>
 
-          {/* Resultado proyectado */}
+          {/* Flujo libre proyectado */}
           <div style={{
             padding: '9px 13px', borderRadius: 8, marginBottom: 10,
             background: projectedFreeFlow >= 0 ? '#f0fdf4' : '#fef2f2',
@@ -268,7 +260,7 @@ export function DashboardFinanzas() {
             <span style={{ fontSize: 15, fontWeight: 800, color: projectedFreeFlow >= 0 ? '#15803d' : '#dc2626' }}>{clp(projectedFreeFlow)}</span>
           </div>
 
-          {/* Comparación saldo vs necesidades */}
+          {/* Saldo vs necesidades */}
           {availableBalance > 0 && (
             <div style={{
               padding: '9px 13px', borderRadius: 8,
@@ -286,13 +278,14 @@ export function DashboardFinanzas() {
 
         {/* Gastos por categoría */}
         <div className="card" style={{ padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          {/* Header con toggles */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-1)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Wallet size={15} /> Gastos por categoría
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
               {(['month', 'year'] as const).map(v => (
-                <button key={v} onClick={() => { setCatView(v); setExpandedCat(null) }} style={{
+                <button key={v} onClick={() => { setCatView(v); setExpandedCat(null); setCatFilter('all') }} style={{
                   padding: '4px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
                   background: catView === v ? '#2563eb' : 'var(--bg-secondary)',
                   color: catView === v ? 'white' : 'var(--text-2)',
@@ -303,30 +296,53 @@ export function DashboardFinanzas() {
             </div>
           </div>
 
-          {catData.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-              Sin gastos registrados para {catView === 'month' ? 'este mes' : 'este año'}.<br />
-              <span style={{ fontSize: 11 }}>Agrégalos en la pestaña "Registro gastos".</span>
+          {/* Filtro por categoría */}
+          {catData.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+              <button onClick={() => setCatFilter('all')} style={{
+                padding: '3px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                background: catFilter === 'all' ? '#0f172a' : 'var(--bg-secondary)',
+                color: catFilter === 'all' ? 'white' : 'var(--text-2)',
+              }}>Todas</button>
+              {catData.map(c => (
+                <button key={c.value} onClick={() => setCatFilter(catFilter === c.value ? 'all' : c.value)} style={{
+                  padding: '3px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                  background: catFilter === c.value ? c.color : 'var(--bg-secondary)',
+                  color: catFilter === c.value ? 'white' : 'var(--text-2)',
+                }}>{c.emoji} {c.label}</button>
+              ))}
+              {uncategorizedTotal > 0 && (
+                <button onClick={() => setCatFilter(catFilter === 'none' ? 'all' : 'none')} style={{
+                  padding: '3px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                  background: catFilter === 'none' ? '#64748b' : 'var(--bg-secondary)',
+                  color: catFilter === 'none' ? 'white' : 'var(--text-2)',
+                }}>— Sin categoría</button>
+              )}
             </div>
-          ) : (
+          )}
+
+          {allExpenseItems.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+              Sin gastos en {catView === 'month' ? 'este mes' : `el año ${selectedYM.slice(0, 4)}`}.<br />
+              <span style={{ fontSize: 11 }}>Agrégalos en "Ingresos & Gastos".</span>
+            </div>
+          ) : catFilter === 'all' ? (
+            /* Vista resumen por categoría */
             <div>
               {catData.map(cat => {
                 const pct = totalCatSpend > 0 ? (cat.total / totalCatSpend) * 100 : 0
                 const isExpanded = expandedCat === cat.value
                 return (
                   <div key={cat.value}>
-                    <div
-                      onClick={() => setExpandedCat(isExpanded ? null : cat.value)}
+                    <div onClick={() => setExpandedCat(isExpanded ? null : cat.value)}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 6px', cursor: 'pointer', borderRadius: 8,
-                        background: isExpanded ? 'var(--bg-secondary)' : 'transparent' }}
-                    >
-                      <span style={{ fontSize: 16, lineHeight: 1 }}>{cat.emoji}</span>
+                        background: isExpanded ? 'var(--bg-secondary)' : 'transparent' }}>
+                      <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{cat.emoji}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                           <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>{cat.label}</span>
                           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
-                            {clp(cat.total)}&nbsp;
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>{pct.toFixed(0)}%</span>
+                            {clp(cat.total)} <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>{pct.toFixed(0)}%</span>
                           </span>
                         </div>
                         <div style={{ height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
@@ -337,83 +353,103 @@ export function DashboardFinanzas() {
                         {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                       </div>
                     </div>
-
-                    {/* Expanded items */}
                     {isExpanded && (
                       <div style={{ margin: '2px 0 6px 32px', background: 'var(--bg-secondary)', borderRadius: 8, padding: '6px 10px', border: '1px solid var(--border)' }}>
-                        {cat.items.map(item => (
-                          <div key={item.id} style={{
-                            display: 'flex', justifyContent: 'space-between',
-                            padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 12,
-                          }}>
-                            <span style={{ color: 'var(--text-2)' }}>
-                              {item.name}
-                              {item.notes && <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>· {item.notes}</span>}
-                            </span>
-                            <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
-                              <span style={{ fontWeight: 600, color: 'var(--text-1)' }}>{clp(item.amount_CLP)}</span>
-                              <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 6 }}>
-                                {new Date(item.date + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
-                              </span>
-                            </div>
+                        {cat.items.map((item, idx) => (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+                            <span style={{ color: 'var(--text-2)' }}>{item.name}</span>
+                            <span style={{ fontWeight: 600, color: 'var(--text-1)' }}>{clp(item.amount_CLP)}</span>
                           </div>
                         ))}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>
-                          <span>{cat.items.length} gasto{cat.items.length !== 1 ? 's' : ''}</span>
-                          <span>{clp(cat.total)}</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6, fontSize: 12, fontWeight: 700 }}>
+                          <span style={{ color: 'var(--text-2)' }}>{cat.items.length} ítem{cat.items.length !== 1 ? 's' : ''}</span>
+                          <span style={{ color: 'var(--text-1)' }}>{clp(cat.total)}</span>
                         </div>
                       </div>
                     )}
                   </div>
                 )
               })}
-
-              {/* Total */}
+              {uncategorizedTotal > 0 && (
+                <div style={{ padding: '6px 6px', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)', borderTop: '1px dashed var(--border)', marginTop: 4 }}>
+                  <span>— Sin categoría ({uncategorized.length} ítems)</span>
+                  <span>{clp(uncategorizedTotal)}</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 6px 0', borderTop: '2px solid var(--border)', marginTop: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Total registrado</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Total gastos</span>
                 <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-1)' }}>{clp(totalCatSpend)}</span>
               </div>
+            </div>
+          ) : (
+            /* Vista filtrada por categoría o sin categoría */
+            <div>
+              <div style={{ marginBottom: 10, fontSize: 13, color: 'var(--text-2)' }}>
+                {filteredItems.length} ítem{filteredItems.length !== 1 ? 's' : ''} ·{' '}
+                <strong style={{ color: 'var(--text-1)' }}>{clp(filteredItems.reduce((s, i) => s + i.amount_CLP, 0))}</strong>
+              </div>
+              {filteredItems.map((item, idx) => {
+                const info = getCatInfo(item.category)
+                return (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 8px', borderBottom: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 15 }}>{info.emoji}</span>
+                      <div>
+                        <div style={{ color: 'var(--text-1)', fontWeight: 500 }}>{item.name}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{item.section === 'fixed' ? 'Gasto fijo' : 'Gasto variable'}</div>
+                      </div>
+                    </div>
+                    <span style={{ fontWeight: 700, color: 'var(--text-1)' }}>{clp(item.amount_CLP)}</span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Detalle gastos del mes (desde balance mensual) ── */}
+      {/* Detalle gastos del mes (desde balance mensual) */}
       {record && (record.fixedExpenses.length > 0 || record.variableExpenses.length > 0) && (
         <div className="card" style={{ padding: 20, marginBottom: 16 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-1)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             <TrendingDown size={15} /> Detalle de gastos · {fullLabelYM(record.yearMonth)}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-            {/* Fixed */}
             {record.fixedExpenses.length > 0 && (
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Gastos fijos</div>
-                {record.fixedExpenses.map(item => (
-                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
-                    <span style={{ color: 'var(--text-2)' }}>{item.name}</span>
-                    <span style={{ fontWeight: 600, color: 'var(--text-1)' }}>{clp(item.amount_CLP)}</span>
-                  </div>
-                ))}
-                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
-                  <span>Subtotal fijos</span>
-                  <span>{clp(monthlyFixed)}</span>
+                {record.fixedExpenses.map(item => {
+                  const info = getCatInfo(item.category)
+                  return (
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 13, gap: 8 }}>
+                      <span style={{ fontSize: 14 }}>{info.emoji}</span>
+                      <span style={{ flex: 1, color: 'var(--text-2)' }}>{item.name}</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-1)' }}>{clp(item.amount_CLP)}</span>
+                    </div>
+                  )
+                })}
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, fontSize: 13, fontWeight: 700 }}>
+                  <span style={{ color: 'var(--text-2)' }}>Subtotal fijos</span>
+                  <span style={{ color: 'var(--text-1)' }}>{clp(monthlyFixed)}</span>
                 </div>
               </div>
             )}
-            {/* Variable */}
             {record.variableExpenses.length > 0 && (
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Gastos variables</div>
-                {record.variableExpenses.map(item => (
-                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
-                    <span style={{ color: 'var(--text-2)' }}>{item.name}</span>
-                    <span style={{ fontWeight: 600, color: 'var(--text-1)' }}>{clp(item.amount_CLP)}</span>
-                  </div>
-                ))}
-                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
-                  <span>Subtotal variables</span>
-                  <span>{clp(monthlyVariable)}</span>
+                {record.variableExpenses.map(item => {
+                  const info = getCatInfo(item.category)
+                  return (
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 13, gap: 8 }}>
+                      <span style={{ fontSize: 14 }}>{info.emoji}</span>
+                      <span style={{ flex: 1, color: 'var(--text-2)' }}>{item.name}</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-1)' }}>{clp(item.amount_CLP)}</span>
+                    </div>
+                  )
+                })}
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, fontSize: 13, fontWeight: 700 }}>
+                  <span style={{ color: 'var(--text-2)' }}>Subtotal variables</span>
+                  <span style={{ color: 'var(--text-1)' }}>{clp(monthlyVariable)}</span>
                 </div>
               </div>
             )}
@@ -421,10 +457,10 @@ export function DashboardFinanzas() {
         </div>
       )}
 
-      {/* ── Row: Próximas cuotas + Tarjetas de crédito ── */}
+      {/* Row: Cuotas próximas + Tarjetas de crédito */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
-        {/* Upcoming installments */}
+        {/* Upcoming */}
         <div className="card" style={{ padding: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-1)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Calendar size={15} /> Próximas cuotas
@@ -436,7 +472,6 @@ export function DashboardFinanzas() {
               {upcoming.map(inst => {
                 const debt = debts.find(d => d.id === inst.debtId)
                 const isOverdue = inst.dueDate < today
-                const dueDate = new Date(inst.dueDate + 'T12:00:00')
                 return (
                   <div key={inst.id} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -448,10 +483,10 @@ export function DashboardFinanzas() {
                       <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>{debt?.name ?? 'Deuda'}</div>
                       <div style={{ fontSize: 11, color: isOverdue ? '#dc2626' : 'var(--text-muted)' }}>
                         {isOverdue ? '⚠ Vencida · ' : ''}
-                        {dueDate.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        {new Date(inst.dueDate + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}
                       </div>
                     </div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: isOverdue ? '#dc2626' : 'var(--text-1)', textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: isOverdue ? '#dc2626' : 'var(--text-1)', flexShrink: 0 }}>
                       {clp(inst.amount_CLP)}
                     </div>
                   </div>
@@ -468,7 +503,7 @@ export function DashboardFinanzas() {
           </div>
           {creditCards.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-              Sin tarjetas de crédito registradas.<br />
+              Sin tarjetas registradas.<br />
               <span style={{ fontSize: 11 }}>Agrégalas en Deudas con tipo "Tarjeta de crédito".</span>
             </div>
           ) : (
@@ -498,9 +533,8 @@ export function DashboardFinanzas() {
                       <span>{usedPct.toFixed(0)}% del cupo utilizado</span>
                       {nextInst && (
                         <span>
-                          Próx. cuota: <strong style={{ color: 'var(--text-1)' }}>{clp(nextInst.amount_CLP)}</strong>
-                          {' · '}
-                          {new Date(nextInst.dueDate + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
+                          Próx: <strong style={{ color: 'var(--text-1)' }}>{clp(nextInst.amount_CLP)}</strong>
+                          {' · '}{new Date(nextInst.dueDate + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
                         </span>
                       )}
                     </div>
@@ -508,7 +542,7 @@ export function DashboardFinanzas() {
                 )
               })}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', borderTop: '1px solid var(--border)' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>Total deuda tarjetas</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>Total tarjetas</span>
                 <span style={{ fontSize: 14, fontWeight: 800, color: '#dc2626' }}>{clp(creditCards.reduce((s, c) => s + c.balance_CLP, 0))}</span>
               </div>
             </div>

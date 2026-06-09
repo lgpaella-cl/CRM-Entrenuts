@@ -5,7 +5,8 @@ import {
 } from 'lucide-react'
 import { useStore } from '../../store'
 import { useFmt } from '../../hooks/useExchangeRate'
-import type { MonthSection, MonthLineItem, MonthlyFinanceRecord, Debt } from '../../types'
+import type { MonthSection, MonthLineItem, MonthlyFinanceRecord, Debt, ExpenseItem } from '../../types'
+import { EXPENSE_CATEGORIES, getCatInfo } from '../../utils/categories'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
@@ -149,14 +150,17 @@ interface SectionPanelProps {
   items: MonthLineItem[]
   onAdd: (item: Omit<MonthLineItem, 'id'>) => void
   onUpdate: (itemId: string, name: string, amount: number) => void
+  onCategoryChange?: (itemId: string, category: ExpenseItem['category']) => void
   onDelete: (itemId: string) => void
   clp: (n: number) => string
   sign?: 'positive' | 'negative'
+  showCategory?: boolean
 }
 
-function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onDelete, clp, sign = 'negative' }: SectionPanelProps) {
+function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onCategoryChange, onDelete, clp, sign = 'negative', showCategory = false }: SectionPanelProps) {
   const [newName, setNewName] = useState('')
   const [newAmount, setNewAmount] = useState('')
+  const [newCategory, setNewCategory] = useState<ExpenseItem['category']>('other')
   const [editId, setEditId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editAmount, setEditAmount] = useState('')
@@ -166,8 +170,8 @@ function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onDelete,
   function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     if (!newName.trim() || !newAmount) return
-    onAdd({ name: newName.trim(), amount_CLP: parseFloat(newAmount) || 0 })
-    setNewName(''); setNewAmount('')
+    onAdd({ name: newName.trim(), amount_CLP: parseFloat(newAmount) || 0, ...(showCategory ? { category: newCategory } : {}) })
+    setNewName(''); setNewAmount(''); setNewCategory('other')
   }
 
   function startEdit(item: MonthLineItem) {
@@ -194,28 +198,64 @@ function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onDelete,
         {items.length === 0 && (
           <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 10, marginTop: 4 }}>Sin ítems — agrega uno abajo.</p>
         )}
-        {items.map(item => (
-          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
-            {editId === item.id ? (
-              <>
-                <input className="input" value={editName} onChange={e => setEditName(e.target.value)} style={{ flex: 2 }} autoFocus />
-                <input className="input" type="number" min="0" value={editAmount} onChange={e => setEditAmount(e.target.value)} style={{ flex: 1 }} />
-                <button className="btn btn-success" style={{ padding: '5px 9px' }} onClick={saveEdit}><Check size={13} /></button>
-                <button className="btn btn-secondary" style={{ padding: '5px 9px' }} onClick={() => setEditId(null)}><X size={13} /></button>
-              </>
-            ) : (
-              <>
-                <span style={{ flex: 2, fontSize: 13, color: '#334155' }}>{item.name}</span>
-                <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{clp(item.amount_CLP)}</span>
-                <button className="btn btn-secondary" style={{ padding: '4px 7px' }} onClick={() => startEdit(item)}><Pencil size={12} /></button>
-                <button className="btn btn-danger" style={{ padding: '4px 7px' }} onClick={() => onDelete(item.id)}><Trash2 size={12} /></button>
-              </>
-            )}
-          </div>
-        ))}
-        <form onSubmit={handleAdd} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <input className="input" placeholder="Nombre del ítem…" value={newName} onChange={e => setNewName(e.target.value)} style={{ flex: 2 }} />
-          <input className="input" type="number" min="0" placeholder="$ Monto" value={newAmount} onChange={e => setNewAmount(e.target.value)} style={{ flex: 1 }} />
+        {items.map(item => {
+          const catInfo = getCatInfo(item.category)
+          return (
+            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
+              {editId === item.id ? (
+                <>
+                  <input className="input" value={editName} onChange={e => setEditName(e.target.value)} style={{ flex: 2 }} autoFocus />
+                  <input className="input" type="number" min="0" value={editAmount} onChange={e => setEditAmount(e.target.value)} style={{ flex: 1 }} />
+                  <button className="btn btn-success" style={{ padding: '5px 9px' }} onClick={saveEdit}><Check size={13} /></button>
+                  <button className="btn btn-secondary" style={{ padding: '5px 9px' }} onClick={() => setEditId(null)}><X size={13} /></button>
+                </>
+              ) : (
+                <>
+                  {showCategory && onCategoryChange && (
+                    <select
+                      value={item.category ?? ''}
+                      onChange={e => onCategoryChange(item.id, e.target.value as ExpenseItem['category'])}
+                      title="Categoría"
+                      style={{
+                        border: 'none', background: 'transparent', fontSize: 16,
+                        cursor: 'pointer', padding: '0 2px', flexShrink: 0,
+                        outline: 'none', appearance: 'none', WebkitAppearance: 'none',
+                      }}
+                    >
+                      <option value="">—</option>
+                      {EXPENSE_CATEGORIES.map(c => (
+                        <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
+                      ))}
+                    </select>
+                  )}
+                  {showCategory && !onCategoryChange && (
+                    <span title={catInfo.label} style={{ fontSize: 15, flexShrink: 0 }}>{catInfo.emoji}</span>
+                  )}
+                  <span style={{ flex: 2, fontSize: 13, color: '#334155' }}>{item.name}</span>
+                  {showCategory && item.category && (
+                    <span style={{
+                      fontSize: 10, padding: '2px 6px', borderRadius: 10, flexShrink: 0,
+                      background: catInfo.color + '22', color: catInfo.color, fontWeight: 600,
+                    }}>{catInfo.label}</span>
+                  )}
+                  <span style={{ fontWeight: 600, fontSize: 13, color: '#0f172a', textAlign: 'right', flexShrink: 0 }}>{clp(item.amount_CLP)}</span>
+                  <button className="btn btn-secondary" style={{ padding: '4px 7px' }} onClick={() => startEdit(item)}><Pencil size={12} /></button>
+                  <button className="btn btn-danger" style={{ padding: '4px 7px' }} onClick={() => onDelete(item.id)}><Trash2 size={12} /></button>
+                </>
+              )}
+            </div>
+          )
+        })}
+        <form onSubmit={handleAdd} style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <input className="input" placeholder="Nombre del ítem…" value={newName} onChange={e => setNewName(e.target.value)} style={{ flex: '2 1 140px' }} />
+          <input className="input" type="number" min="0" placeholder="$ Monto" value={newAmount} onChange={e => setNewAmount(e.target.value)} style={{ flex: '1 1 100px' }} />
+          {showCategory && (
+            <select className="input" value={newCategory} onChange={e => setNewCategory(e.target.value as ExpenseItem['category'])} style={{ flex: '1 1 130px' }}>
+              {EXPENSE_CATEGORIES.map(c => (
+                <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
+              ))}
+            </select>
+          )}
           <button type="submit" className="btn btn-primary" style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>
             <Plus size={13} /> Agregar
           </button>
@@ -340,7 +380,7 @@ function AnnualView({ records, debts, clp, year }: AnnualViewProps) {
 // ── Main component ───────────────────────────────────────────────────────────
 
 export function MonthlyBalance() {
-  const { monthlyRecords, addMonthlyRecord, copyMonthlyRecord, deleteMonthlyRecord, addMonthItem, updateMonthItem, deleteMonthItem, debts, savings } = useStore()
+  const { monthlyRecords, addMonthlyRecord, copyMonthlyRecord, deleteMonthlyRecord, addMonthItem, updateMonthItem, updateMonthItemCategory, deleteMonthItem, debts, savings } = useStore()
   const { clp } = useFmt()
 
   const [selectedMonth, setSelectedMonth] = useState(currentYM())
@@ -363,9 +403,10 @@ export function MonthlyBalance() {
 
   function makeHandlers(section: MonthSection) {
     return {
-      onAdd: (item: Omit<MonthLineItem, 'id'>) => { if (record) addMonthItem(record.id, section, item) },
-      onUpdate: (itemId: string, name: string, amount: number) => { if (record) updateMonthItem(record.id, section, itemId, name, amount) },
-      onDelete: (itemId: string) => { if (record) deleteMonthItem(record.id, section, itemId) },
+      onAdd:           (item: Omit<MonthLineItem, 'id'>) => { if (record) addMonthItem(record.id, section, item) },
+      onUpdate:        (itemId: string, name: string, amount: number) => { if (record) updateMonthItem(record.id, section, itemId, name, amount) },
+      onCategoryChange:(itemId: string, category: ExpenseItem['category']) => { if (record) updateMonthItemCategory(record.id, section, itemId, category) },
+      onDelete:        (itemId: string) => { if (record) deleteMonthItem(record.id, section, itemId) },
     }
   }
 
@@ -476,6 +517,7 @@ export function MonthlyBalance() {
                   headerBg="#d97706"
                   items={record.fixedExpenses}
                   clp={clp}
+                  showCategory
                   {...makeHandlers('fixedExpenses')}
                 />
                 <SectionPanel
@@ -484,6 +526,7 @@ export function MonthlyBalance() {
                   headerBg="#dc2626"
                   items={record.variableExpenses}
                   clp={clp}
+                  showCategory
                   {...makeHandlers('variableExpenses')}
                 />
 
