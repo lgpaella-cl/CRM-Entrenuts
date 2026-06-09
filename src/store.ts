@@ -276,7 +276,11 @@ export const useStore = create<AppState>()(
         const existing = s.debtInstallments.filter(i => i.debtId !== debtId)
         const [y, m, d] = startDate.split('-').map(Number)
         const newInstallments: DebtInstallment[] = Array.from({ length: total }, (_, n) => {
-          const date = new Date(y, m - 1 + n, d || 1)
+          // Clamp day to last valid day of each target month to avoid overflow
+          // e.g. Jan 31 + 5 months → Jun 30 (not Jul 1)
+          const lastDayOfTargetMonth = new Date(y, m + n, 0).getDate()
+          const safeDay = Math.min(d || 1, lastDayOfTargetMonth)
+          const date = new Date(y, m - 1 + n, safeDay)
           return {
             id: uid(), debtId, number: n + 1,
             dueDate: date.toISOString().split('T')[0],
