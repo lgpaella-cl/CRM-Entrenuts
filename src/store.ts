@@ -12,6 +12,9 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
 }
 
+// Stock entry usado por todos los PdV con shareStock=true
+export const SHARED_STOCK_ID = '__shared__'
+
 function generateSKU(name: string, existing: Product[]): string {
   const prefix = name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4).padEnd(4, 'X')
   const num = String(existing.length + 1).padStart(4, '0')
@@ -162,21 +165,25 @@ export const useStore = create<AppState>()(
       updateStore: (id, data) => set(s => ({ stores: s.stores.map(st => st.id === id ? { ...st, ...data } : st) })),
       deleteStore: (id) => set(s => ({ stores: s.stores.filter(st => st.id !== id) })),
 
-      // Stock
+      // Stock — si el PdV tiene shareStock=true, usa SHARED_STOCK_ID como storeId
       setStock: (productId, storeId, data) => set(s => {
-        const existing = s.stock.find(e => e.productId === productId && e.storeId === storeId)
+        const store = s.stores.find(st => st.id === storeId)
+        const effectiveId = store?.shareStock ? SHARED_STOCK_ID : storeId
+        const existing = s.stock.find(e => e.productId === productId && e.storeId === effectiveId)
         if (existing) {
-          return { stock: s.stock.map(e => e.productId === productId && e.storeId === storeId ? { ...e, ...data, updatedAt: new Date().toISOString() } : e) }
+          return { stock: s.stock.map(e => e.productId === productId && e.storeId === effectiveId ? { ...e, ...data, updatedAt: new Date().toISOString() } : e) }
         }
-        return { stock: [...s.stock, { id: uid(), productId, storeId, quantity: 0, minStock: 5, costPrice_CLP: 0, salePrice_CLP: 0, ...data, updatedAt: new Date().toISOString() }] }
+        return { stock: [...s.stock, { id: uid(), productId, storeId: effectiveId, quantity: 0, minStock: 5, costPrice_CLP: 0, salePrice_CLP: 0, ...data, updatedAt: new Date().toISOString() }] }
       }),
 
-      // Ventas
+      // Ventas — descuenta del stock compartido si el PdV tiene shareStock=true
       addSale: (data) => {
         const sale: SaleRecord = { ...data, id: uid() }
         set(s => {
+          const store = s.stores.find(st => st.id === data.storeId)
+          const effectiveId = store?.shareStock ? SHARED_STOCK_ID : data.storeId
           const updatedStock = s.stock.map(e =>
-            e.productId === data.productId && e.storeId === data.storeId
+            e.productId === data.productId && e.storeId === effectiveId
               ? { ...e, quantity: Math.max(0, e.quantity - data.quantity), updatedAt: new Date().toISOString() }
               : e
           )

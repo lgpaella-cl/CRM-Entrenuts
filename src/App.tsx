@@ -10,6 +10,7 @@ import { ProjectionTab } from './components/importadora/ProjectionTab'
 import { BusinessFinanceTab } from './components/importadora/BusinessFinanceTab'
 import { PurchaseOrdersTab } from './components/importadora/PurchaseOrdersTab'
 import { PdVAnalysisTab } from './components/importadora/PdVAnalysisTab'
+import { CustomsCalculatorTab } from './components/importadora/CustomsCalculatorTab'
 import { DashboardFinanzas } from './components/finanzas/DashboardFinanzas'
 import { MonthlyBalance } from './components/finanzas/MonthlyBalance'
 import { DebtsTab } from './components/finanzas/DebtsTab'
@@ -20,12 +21,12 @@ import {
   BarChart2, Package, MapPin, Grid3X3, TrendingUp, TrendingDown,
   CreditCard, PiggyBank, LineChart, Building2, Wallet,
   Download, Upload, DollarSign, Moon, Sun, Bell, Search, X,
-  ClipboardList, LayoutDashboard, Menu
+  ClipboardList, LayoutDashboard, Menu, Calculator
 } from 'lucide-react'
 import './index.css'
 
 type MainTab = 'importadora' | 'finanzas'
-type ImportadoraSubTab = 'dashboard' | 'products' | 'stores' | 'inventory' | 'sales' | 'projection' | 'bizfinance' | 'orders' | 'pdvanalysis'
+type ImportadoraSubTab = 'dashboard' | 'products' | 'stores' | 'inventory' | 'sales' | 'projection' | 'bizfinance' | 'orders' | 'pdvanalysis' | 'customs'
 type FinanzasSubTab = 'dashboard' | 'incomes' | 'debts' | 'savings' | 'projection'
 
 const importadoraTabs: { id: ImportadoraSubTab; label: string; icon: React.ReactNode }[] = [
@@ -38,6 +39,7 @@ const importadoraTabs: { id: ImportadoraSubTab; label: string; icon: React.React
   { id: 'bizfinance', label: 'Estado Result.', icon: <DollarSign size={15} /> },
   { id: 'orders', label: 'Órdenes', icon: <ClipboardList size={15} /> },
   { id: 'pdvanalysis', label: 'Análisis PdV', icon: <BarChart2 size={15} /> },
+  { id: 'customs', label: 'Calc. Aduanera', icon: <Calculator size={15} /> },
 ]
 
 const finanzasTabs: { id: FinanzasSubTab; label: string; icon: React.ReactNode }[] = [
@@ -433,6 +435,7 @@ export default function App() {
               {importadoraTab === 'bizfinance' && <BusinessFinanceTab />}
               {importadoraTab === 'orders' && <PurchaseOrdersTab />}
               {importadoraTab === 'pdvanalysis' && <PdVAnalysisTab />}
+              {importadoraTab === 'customs' && <CustomsCalculatorTab />}
             </>
           )}
           {mainTab === 'finanzas' && (

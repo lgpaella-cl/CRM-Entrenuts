@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { Plus, Pencil, Trash2, MapPin, Package, ChevronDown, ChevronUp, Percent } from 'lucide-react'
-import { useStore } from '../../store'
+import { Plus, Pencil, Trash2, MapPin, Package, ChevronDown, ChevronUp, Percent, Warehouse } from 'lucide-react'
+import { useStore, SHARED_STOCK_ID } from '../../store'
 import { Modal } from '../shared/Modal'
 import { ConfirmDialog } from '../shared/ConfirmDialog'
 import { useFmt } from '../../hooks/useExchangeRate'
 import type { Store } from '../../types'
 
 function emptyStoreForm(): Omit<Store, 'id'> {
-  return { name: '', address: '', city: '', contactName: '', contactPhone: '', active: true, commissionPct: 0 }
+  return { name: '', address: '', city: '', contactName: '', contactPhone: '', active: true, commissionPct: 0, shareStock: false }
 }
 
 function emptyProductForm() {
@@ -45,6 +45,7 @@ export function PuntosDeVentaTab() {
       name: s.name, address: s.address, city: s.city,
       contactName: s.contactName, contactPhone: s.contactPhone,
       active: s.active, commissionPct: s.commissionPct ?? 0,
+      shareStock: s.shareStock ?? false,
     })
     setEditingStore(s)
     setShowStoreForm(true)
@@ -59,6 +60,11 @@ export function PuntosDeVentaTab() {
 
   /* ── Product assignment ──────────────────────────────────────── */
 
+  function getEffectiveStoreId(storeId: string): string {
+    const store = stores.find(s => s.id === storeId)
+    return store?.shareStock ? SHARED_STOCK_ID : storeId
+  }
+
   function openAddProduct(storeId: string) {
     setProductFormStoreId(storeId)
     setProductForm(emptyProductForm())
@@ -66,7 +72,8 @@ export function PuntosDeVentaTab() {
   }
 
   function openEditProduct(storeId: string, productId: string) {
-    const entry = stock.find(e => e.storeId === storeId && e.productId === productId)
+    const effectiveId = getEffectiveStoreId(storeId)
+    const entry = stock.find(e => e.storeId === effectiveId && e.productId === productId)
     if (!entry) return
     setProductFormStoreId(storeId)
     setProductForm({
@@ -94,7 +101,15 @@ export function PuntosDeVentaTab() {
   /* ── Helpers ─────────────────────────────────────────────────── */
 
   function getStoreStock(storeId: string) {
-    return stock.filter(e => e.storeId === storeId)
+    const effectiveId = getEffectiveStoreId(storeId)
+    return stock.filter(e => e.storeId === effectiveId)
+  }
+
+  function effectiveCostCLP(productId: string): number {
+    const prod = products.find(p => p.id === productId)
+    if (!prod) return 0
+    if (prod.costCLP && prod.costCLP > 0) return prod.costCLP
+    return usdToClp(prod.costFOB_USD)
   }
 
   /* ── Render ──────────────────────────────────────────────────── */
@@ -145,6 +160,11 @@ export function PuntosDeVentaTab() {
                         <Percent size={11} /> {s.commissionPct}% comisión
                       </span>
                     )}
+                    {s.shareStock && (
+                      <span className="badge badge-purple" style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <Warehouse size={11} /> Stock compartido
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#6b7280', flexWrap: 'wrap' }}>
                     {s.city && <span>{s.city}</span>}
@@ -160,6 +180,7 @@ export function PuntosDeVentaTab() {
                     <div style={{ marginTop: 8, display: 'flex', gap: 12, fontSize: 12 }}>
                       <span style={{ color: '#374151' }}>
                         <strong>{storeStock.length}</strong> productos · <strong>{totalUnits}</strong> uds. stock
+                        {s.shareStock && <span style={{ color: '#7c3aed', marginLeft: 4 }}>(bodega común)</span>}
                       </span>
                       {lowStockCount > 0 && (
                         <span className="badge badge-yellow">{lowStockCount} stock bajo</span>
@@ -195,14 +216,16 @@ export function PuntosDeVentaTab() {
                 <div style={{ borderTop: '1px solid #e2e8f0', padding: '16px 20px 20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                     <h4 style={{ fontWeight: 600, color: '#374151', fontSize: 14 }}>
-                      Productos en este punto de venta
+                      {s.shareStock
+                        ? '📦 Productos — Stock de bodega común'
+                        : 'Productos en este punto de venta'}
                     </h4>
                     <button
                       className="btn btn-primary"
                       style={{ padding: '5px 12px', fontSize: 12 }}
                       onClick={() => openAddProduct(s.id)}
                     >
-                      <Plus size={13} /> Agregar producto
+                      <Plus size={13} /> {s.shareStock ? 'Agregar a bodega' : 'Agregar producto'}
                     </button>
                   </div>
 
@@ -229,7 +252,7 @@ export function PuntosDeVentaTab() {
                           const prod = products.find(p => p.id === entry.productId)
                           const costPdV = entry.costPrice_CLP ?? 0
                           const salePrice = entry.salePrice_CLP ?? 0
-                          const myCost = usdToClp(prod?.costFOB_USD ?? 0)
+                          const myCost = effectiveCostCLP(entry.productId)
 
                           const pdvMarginPct = salePrice > 0 && costPdV > 0
                             ? ((salePrice - costPdV) / salePrice) * 100 : null
@@ -375,6 +398,42 @@ export function PuntosDeVentaTab() {
                 % que cobra el PdV sobre cada venta. Ej: 30 si se queda con el 30% de lo vendido.
               </p>
             </div>
+
+            {/* Stock compartido */}
+            <div style={{ background: '#faf5ff', borderRadius: 10, padding: '14px 16px', border: '1px solid #e9d5ff' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Warehouse size={16} style={{ color: '#7c3aed' }} />
+                  <span style={{ fontWeight: 600, fontSize: 14, color: '#374151' }}>Stock compartido</span>
+                </div>
+                <div style={{ display: 'flex', gap: 0, border: '1px solid #d8b4fe', borderRadius: 8, overflow: 'hidden' }}>
+                  <button
+                    type="button"
+                    onClick={() => setStoreForm(f => ({ ...f, shareStock: false }))}
+                    style={{
+                      padding: '5px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+                      background: !storeForm.shareStock ? '#7c3aed' : '#fff',
+                      color: !storeForm.shareStock ? '#fff' : '#7c3aed',
+                    }}
+                  >No</button>
+                  <button
+                    type="button"
+                    onClick={() => setStoreForm(f => ({ ...f, shareStock: true }))}
+                    style={{
+                      padding: '5px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+                      background: storeForm.shareStock ? '#7c3aed' : '#fff',
+                      color: storeForm.shareStock ? '#fff' : '#7c3aed',
+                    }}
+                  >Sí</button>
+                </div>
+              </div>
+              <p style={{ fontSize: 11, color: '#6b7280' }}>
+                {storeForm.shareStock
+                  ? '✅ Este PdV toma del stock total en bodega. Las ventas reducen el inventario compartido.'
+                  : 'Este PdV tiene su propio inventario exclusivo, independiente de otros canales.'}
+              </p>
+            </div>
+
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -397,6 +456,11 @@ export function PuntosDeVentaTab() {
       {/* ── Product assignment modal ──────────────────────────────── */}
       {showProductForm && productFormStoreId && (
         <Modal title="Asignar Producto a Punto de Venta" onClose={() => setShowProductForm(false)}>
+          {stores.find(s => s.id === productFormStoreId)?.shareStock && (
+            <div style={{ marginBottom: 12, background: '#faf5ff', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#7c3aed', border: '1px solid #e9d5ff', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Warehouse size={13} /> Este PdV usa stock compartido. El stock se gestiona desde la bodega común.
+            </div>
+          )}
           <form onSubmit={handleProductSubmit} className="flex flex-col gap-4">
             <div>
               <label className="label">Producto *</label>

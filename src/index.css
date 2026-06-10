@@ -99,6 +99,7 @@ body {
 .badge-yellow { background: #fef9c3; color: #a16207; }
 .badge-red { background: #fee2e2; color: #dc2626; }
 .badge-blue { background: #dbeafe; color: #1d4ed8; }
+.badge-purple { background: #f3e8ff; color: #7c3aed; }
 .badge-gray { background: var(--bg-secondary); color: var(--text-muted); }
 
 table { width: 100%; border-collapse: collapse; }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Save, AlertTriangle } from 'lucide-react'
-import { useStore } from '../../store'
+import { Save, AlertTriangle, Warehouse } from 'lucide-react'
+import { useStore, SHARED_STOCK_ID } from '../../store'
 import { useFmt } from '../../hooks/useExchangeRate'
 
 export function InventoryTab() {
@@ -11,8 +11,21 @@ export function InventoryTab() {
 
   const activeStores = stores.filter(s => s.active)
 
+  function getEffectiveStoreId(storeId: string): string {
+    const store = stores.find(s => s.id === storeId)
+    return store?.shareStock ? SHARED_STOCK_ID : storeId
+  }
+
+  function effectiveCostCLP(productId: string): number {
+    const prod = products.find(p => p.id === productId)
+    if (!prod) return 0
+    if (prod.costCLP && prod.costCLP > 0) return prod.costCLP
+    return usdToClp(prod.costFOB_USD)
+  }
+
   function getStock(productId: string, storeId: string) {
-    return stock.find(e => e.productId === productId && e.storeId === storeId)
+    const effectiveId = getEffectiveStoreId(storeId)
+    return stock.find(e => e.productId === productId && e.storeId === effectiveId)
   }
 
   function startEdit(productId: string, storeId: string) {
@@ -28,6 +41,7 @@ export function InventoryTab() {
     const key = `${productId}-${storeId}`
     const e = editing[key]
     if (!e) return
+    // setStock in store.ts already handles redirect to SHARED_STOCK_ID
     setStock(productId, storeId, {
       quantity: parseInt(e.qty) || 0,
       minStock: parseInt(e.min) || 5,
@@ -38,8 +52,13 @@ export function InventoryTab() {
 
   function getSalesVelocity(productId: string, storeId: string): number {
     const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    // For shared stores, aggregate velocity across all shared stores
+    const store = stores.find(s => s.id === storeId)
+    const sharedStoreIds = store?.shareStock
+      ? stores.filter(s => s.shareStock).map(s => s.id)
+      : [storeId]
     const total = sales
-      .filter(s => s.productId === productId && s.storeId === storeId && new Date(s.date) >= thirtyDaysAgo)
+      .filter(s => s.productId === productId && sharedStoreIds.includes(s.storeId) && new Date(s.date) >= thirtyDaysAgo)
       .reduce((sum, s) => sum + s.quantity, 0)
     return total / 30
   }
@@ -55,7 +74,7 @@ export function InventoryTab() {
         </div>
         <select className="input" style={{ width: 220 }} value={selectedStore} onChange={e => setSelectedStore(e.target.value)}>
           <option value="all">Todas las tiendas</option>
-          {activeStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {activeStores.map(s => <option key={s.id} value={s.id}>{s.name}{s.shareStock ? ' 📦' : ''}</option>)}
         </select>
       </div>
 
@@ -69,6 +88,11 @@ export function InventoryTab() {
             <div className="flex items-center gap-3 mb-3">
               <h3 className="font-semibold text-gray-800">{store.name}</h3>
               <span className="text-xs text-gray-400">{store.city}</span>
+              {store.shareStock && (
+                <span className="badge badge-purple" style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <Warehouse size={11} /> Stock compartido
+                </span>
+              )}
             </div>
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <table>
@@ -76,7 +100,7 @@ export function InventoryTab() {
                   <tr>
                     <th>SKU</th>
                     <th>Producto</th>
-                    <th style={{ textAlign: 'right' }}>Costo FOB</th>
+                    <th style={{ textAlign: 'right' }}>Costo c/envío</th>
                     <th style={{ textAlign: 'center' }}>Stock</th>
                     <th style={{ textAlign: 'center' }}>Stock mín.</th>
                     <th style={{ textAlign: 'right' }}>Precio venta</th>
@@ -95,7 +119,7 @@ export function InventoryTab() {
                     const qty = s?.quantity ?? 0
                     const minStock = s?.minStock ?? 5
                     const price = s?.salePrice_CLP ?? 0
-                    const costCLP = usdToClp(prod.costFOB_USD)
+                    const costCLP = effectiveCostCLP(prod.id)
                     const margin = price > 0 ? ((price - costCLP) / price) * 100 : 0
                     const velocity = getSalesVelocity(prod.id, store.id)
                     const daysLeft = velocity > 0 ? Math.round(qty / velocity) : null
@@ -108,7 +132,12 @@ export function InventoryTab() {
                       <tr key={prod.id}>
                         <td><span className="font-mono text-xs badge badge-blue">{prod.sku}</span></td>
                         <td className="font-medium text-gray-900">{prod.name}</td>
-                        <td style={{ textAlign: 'right' }}>{usd(prod.costFOB_USD)}<br /><span className="text-xs text-gray-400">{clp(costCLP)}</span></td>
+                        <td style={{ textAlign: 'right' }}>
+                          {prod.costCLP && prod.costCLP > 0
+                            ? <><span style={{ fontSize: 11, color: '#16a34a' }}>directo</span><br /><span className="text-xs text-gray-900 font-semibold">{clp(prod.costCLP)}</span></>
+                            : <>{usd(prod.costFOB_USD)}<br /><span className="text-xs text-gray-400">{clp(costCLP)}</span></>
+                          }
+                        </td>
                         <td style={{ textAlign: 'center' }}>
                           {isEditing
                             ? <input className="input" style={{ width: 70, textAlign: 'center' }} value={ed.qty} onChange={e => setEditing(prev => ({ ...prev, [key]: { ...prev[key], qty: e.target.value } }))} />

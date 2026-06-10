@@ -10,8 +10,9 @@ export interface Product {
   name: string
   description: string
   category: string
-  costFCA_USD: number   // Free Carrier, costo en origen
-  costFOB_USD: number   // Free On Board, incluye flete a puerto
+  costFCA_USD: number   // Costo proveedor en USD (antes FCA)
+  costFOB_USD: number   // Costo con envío en USD (antes FOB)
+  costCLP?: number      // Precio de costo directo en CLP — si está ingresado, tiene prioridad
   unit: string          // unidad de medida: caja, pieza, kg, etc.
   imageUrl?: string
   createdAt: string
@@ -27,6 +28,7 @@ export interface Store {
   contactPhone: string
   active: boolean
   commissionPct?: number   // % de comisión que cobra el PdV sobre la venta
+  shareStock?: boolean     // true = comparte bodega común; false/undefined = stock exclusivo
 }
 
 export interface StockEntry {
