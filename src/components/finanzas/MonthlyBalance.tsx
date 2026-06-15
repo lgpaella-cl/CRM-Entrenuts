@@ -24,6 +24,12 @@ function prevYM(ym: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+function nextYM(ym: string) {
+  const [y, m] = ym.split('-').map(Number)
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+}
+
+// Solo para AnnualView (historial hacia atrás)
 function last13Months(): string[] {
   const result: string[] = []
   const d = new Date()
@@ -32,6 +38,22 @@ function last13Months(): string[] {
     d.setMonth(d.getMonth() - 1)
   }
   return result.reverse()
+}
+
+// Para el selector de mes: 3 atrás + actual + 5 adelante
+function monthRange(): string[] {
+  const result: string[] = []
+  const now = new Date(); now.setDate(1)
+  for (let i = 3; i >= 1; i--) {
+    const d = new Date(now); d.setMonth(now.getMonth() - i)
+    result.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  result.push(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+  for (let i = 1; i <= 5; i++) {
+    const d = new Date(now); d.setMonth(now.getMonth() + i)
+    result.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  return result
 }
 
 function monthLabel(ym: string, short = false) {
@@ -387,9 +409,20 @@ export function MonthlyBalance() {
   const [selectedMonth, setSelectedMonth] = useState(currentYM())
   const [showAnnual, setShowAnnual] = useState(false)
 
-  const months = last13Months()
+  const months = monthRange()
+  const todayYM = currentYM()
   const record = monthlyRecords.find(r => r.yearMonth === selectedMonth)
   const hasPrev = monthlyRecords.some(r => r.yearMonth === prevYM(selectedMonth))
+
+  function goToNextMonth() {
+    const nm = nextYM(selectedMonth)
+    if (!monthlyRecords.some(r => r.yearMonth === nm)) {
+      if (record) copyMonthlyRecord(selectedMonth, nm)
+      else addMonthlyRecord(nm)
+    }
+    setSelectedMonth(nm)
+    setShowAnnual(false)
+  }
 
   const activeDebts = getActiveDebts(debts, selectedMonth)
   const debtTotal = activeDebts.reduce((s, d) => s + d.monthlyPayment_CLP, 0)
@@ -443,20 +476,26 @@ export function MonthlyBalance() {
         {months.map(ym => {
           const hasRecord = monthlyRecords.some(r => r.yearMonth === ym)
           const isSelected = ym === selectedMonth
+          const isFuture = ym > todayYM
+          const isToday = ym === todayYM
           return (
             <button
               key={ym}
               onClick={() => { setSelectedMonth(ym); setShowAnnual(false) }}
               style={{
-                padding: '7px 15px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                padding: '7px 15px', borderRadius: 20, cursor: 'pointer',
                 fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', transition: 'all 0.15s',
-                background: isSelected ? '#2563eb' : hasRecord ? '#ecfdf5' : '#f8fafc',
-                color: isSelected ? 'white' : hasRecord ? '#059669' : '#94a3b8',
+                border: isFuture && !isSelected ? '1.5px dashed #cbd5e1' : 'none',
+                background: isSelected ? '#2563eb' : hasRecord ? '#ecfdf5' : isFuture ? 'transparent' : '#f8fafc',
+                color: isSelected ? 'white' : hasRecord ? '#059669' : isFuture ? '#94a3b8' : '#94a3b8',
                 boxShadow: isSelected ? '0 2px 8px rgba(37,99,235,0.3)' : 'none',
+                outline: isToday && !isSelected ? '2px solid #bfdbfe' : 'none',
+                outlineOffset: 2,
               }}
             >
               {monthLabel(ym, true)}
               {hasRecord && !isSelected && <span style={{ marginLeft: 5, fontSize: 8, verticalAlign: 'middle' }}>●</span>}
+              {isFuture && !hasRecord && !isSelected && <span style={{ marginLeft: 4, fontSize: 10 }}>+</span>}
             </button>
           )
         })}
@@ -473,12 +512,17 @@ export function MonthlyBalance() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, textTransform: 'capitalize' }}>
               {monthLabel(selectedMonth)}
+              {selectedMonth > todayYM && (
+                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: '#94a3b8', background: '#f1f5f9', borderRadius: 10, padding: '2px 8px' }}>
+                  mes futuro
+                </span>
+              )}
             </h3>
             <div style={{ display: 'flex', gap: 8 }}>
               {!record && (
                 <>
                   <button className="btn btn-primary" onClick={() => addMonthlyRecord(selectedMonth)}>
-                    <Plus size={14} /> Crear registro
+                    <Plus size={14} /> Crear mes
                   </button>
                   {hasPrev && (
                     <button className="btn btn-secondary" onClick={() => copyMonthlyRecord(prevYM(selectedMonth), selectedMonth)}>
@@ -488,9 +532,18 @@ export function MonthlyBalance() {
                 </>
               )}
               {record && (
-                <button className="btn btn-danger" style={{ padding: '6px 12px' }} onClick={() => deleteMonthlyRecord(record.id)}>
-                  <Trash2 size={14} /> Eliminar mes
-                </button>
+                <>
+                  <button
+                    className="btn btn-primary"
+                    onClick={goToNextMonth}
+                    title={`Guardar ${monthLabel(selectedMonth, true)} e ir a ${monthLabel(nextYM(selectedMonth), true)}`}
+                  >
+                    <Check size={14} /> Guardar mes → {monthLabel(nextYM(selectedMonth), true)}
+                  </button>
+                  <button className="btn btn-danger" style={{ padding: '6px 12px' }} onClick={() => deleteMonthlyRecord(record.id)}>
+                    <Trash2 size={14} />
+                  </button>
+                </>
               )}
             </div>
           </div>
