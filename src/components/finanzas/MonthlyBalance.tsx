@@ -380,11 +380,13 @@ function AnnualView({ records, debts, clp, year }: AnnualViewProps) {
 // ── Main component ───────────────────────────────────────────────────────────
 
 export function MonthlyBalance() {
-  const { monthlyRecords, addMonthlyRecord, copyMonthlyRecord, deleteMonthlyRecord, addMonthItem, updateMonthItem, updateMonthItemCategory, deleteMonthItem, debts, savings } = useStore()
+  const { monthlyRecords, addMonthlyRecord, copyMonthlyRecord, deleteMonthlyRecord, addMonthItem, updateMonthItem, updateMonthItemCategory, deleteMonthItem, setMonthAvailableBalance, debts, savings } = useStore()
   const { clp } = useFmt()
 
   const [selectedMonth, setSelectedMonth] = useState(currentYM())
   const [showAnnual, setShowAnnual] = useState(false)
+  const [editingBalance, setEditingBalance] = useState(false)
+  const [balanceInput, setBalanceInput] = useState('')
 
   const months = last13Months()
   const record = monthlyRecords.find(r => r.yearMonth === selectedMonth)
@@ -398,8 +400,9 @@ export function MonthlyBalance() {
   const fixed = record ? record.fixedExpenses.reduce((s, i) => s + i.amount_CLP, 0) : 0
   const variable = record ? record.variableExpenses.reduce((s, i) => s + i.amount_CLP, 0) : 0
   const invest = record ? record.investments.reduce((s, i) => s + i.amount_CLP, 0) : 0
+  const availableBalance = record?.availableBalance_CLP ?? 0
   const totalOut = fixed + variable + debtTotal + invest
-  const freeBalance = income - totalOut
+  const freeBalance = availableBalance + income - totalOut
 
   function makeHandlers(section: MonthSection) {
     return {
@@ -571,6 +574,58 @@ export function MonthlyBalance() {
                   clp={clp}
                   {...makeHandlers('investments')}
                 />
+
+                {/* Saldo Cuenta Disponible */}
+                <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden', marginBottom: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                  <div style={{ background: '#0f766e', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'white', fontWeight: 600, fontSize: 14 }}>
+                      <Wallet size={15} /> Saldo Cuenta Disponible
+                    </div>
+                    <span style={{ color: 'rgba(255,255,255,0.95)', fontWeight: 700, fontSize: 15 }}>
+                      {clp(availableBalance)}
+                    </span>
+                  </div>
+                  <div style={{ padding: '14px 20px' }}>
+                    <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px' }}>
+                      Saldo que tienes en cuenta para cubrir gastos de este mes. Se suma al flujo del balance.
+                    </p>
+                    {editingBalance ? (
+                      <form
+                        onSubmit={e => {
+                          e.preventDefault()
+                          setMonthAvailableBalance(record.id, parseFloat(balanceInput) || 0)
+                          setEditingBalance(false)
+                        }}
+                        style={{ display: 'flex', gap: 8 }}
+                      >
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          autoFocus
+                          value={balanceInput}
+                          onChange={e => setBalanceInput(e.target.value)}
+                          placeholder="Ej: 500000"
+                          style={{ flex: 1 }}
+                        />
+                        <button type="submit" className="btn btn-success" style={{ padding: '7px 12px' }}>
+                          <Check size={13} />
+                        </button>
+                        <button type="button" className="btn btn-secondary" style={{ padding: '7px 12px' }} onClick={() => setEditingBalance(false)}>
+                          <X size={13} />
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        className="btn btn-secondary"
+                        style={{ width: '100%', justifyContent: 'center', fontSize: 13 }}
+                        onClick={() => { setBalanceInput(availableBalance > 0 ? String(availableBalance) : ''); setEditingBalance(true) }}
+                      >
+                        <Pencil size={13} /> {availableBalance > 0 ? `Actualizar saldo (${clp(availableBalance)})` : 'Ingresar saldo en cuenta'}
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* ── Derecha: balance + recomendaciones ── */}
@@ -587,6 +642,7 @@ export function MonthlyBalance() {
                   </h3>
 
                   {[
+                    ...(availableBalance > 0 ? [{ label: '🏦 Saldo en cuenta', amount: availableBalance, color: '#0f766e', neg: false }] : []),
                     { label: '💰 Ingresos', amount: income, color: '#059669', neg: false },
                     { label: '📌 G. fijos', amount: fixed, color: '#d97706', neg: true },
                     { label: '🛒 G. variables', amount: variable, color: '#dc2626', neg: true },
@@ -600,7 +656,12 @@ export function MonthlyBalance() {
                   ))}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, marginTop: 4 }}>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Saldo libre</span>
+                    <div>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Saldo total disponible</span>
+                      {availableBalance > 0 && (
+                        <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>Cuenta + flujo del mes</div>
+                      )}
+                    </div>
                     <span style={{ fontSize: 22, fontWeight: 800, color: freeBalance >= 0 ? '#059669' : '#dc2626' }}>
                       {clp(freeBalance)}
                     </span>

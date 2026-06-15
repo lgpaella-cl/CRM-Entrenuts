@@ -14,6 +14,11 @@ export const EXPENSE_CATEGORIES: {
   { value: 'entertainment', label: 'Entretenimiento', color: '#ec4899', emoji: '🎬' },
   { value: 'subscriptions', label: 'Suscripciones',   color: '#8b5cf6', emoji: '📱' },
   { value: 'business',      label: 'Negocio',         color: '#0ea5e9', emoji: '💼' },
+  { value: 'leisure',       label: 'Ocio',            color: '#f97316', emoji: '🎉' },
+  { value: 'tc_billing',    label: 'Gasto TC x Fact.', color: '#e11d48', emoji: '💳' },
+  { value: 'sport',         label: 'Deporte',         color: '#22c55e', emoji: '🏋️' },
+  { value: 'supermarket',   label: 'Supermercado',    color: '#14b8a6', emoji: '🛒' },
+  { value: 'restaurant',    label: 'Restoranes',      color: '#fb923c', emoji: '🍴' },
   { value: 'other',         label: 'Otro',            color: '#94a3b8', emoji: '📦' },
 ]
 

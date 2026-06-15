@@ -83,7 +83,7 @@ export interface ExpenseItem {
   name: string
   amount_CLP: number
   frequency: FinanceFrequency
-  category: 'housing' | 'transport' | 'food' | 'health' | 'education' | 'entertainment' | 'subscriptions' | 'business' | 'other'
+  category: 'housing' | 'transport' | 'food' | 'health' | 'education' | 'entertainment' | 'subscriptions' | 'business' | 'leisure' | 'tc_billing' | 'sport' | 'supermarket' | 'restaurant' | 'other'
   type: 'fixed' | 'variable'
   active: boolean
 }
@@ -166,6 +166,7 @@ export interface MonthlyFinanceRecord {
   fixedExpenses: MonthLineItem[]
   variableExpenses: MonthLineItem[]
   investments: MonthLineItem[]
+  availableBalance_CLP?: number   // saldo en cuenta al cierre del mes
   notes: string
   createdAt: string
 }

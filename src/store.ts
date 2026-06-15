@@ -111,6 +111,7 @@ interface AppState {
   updateMonthItem: (recordId: string, section: MonthSection, itemId: string, name: string, amount: number) => void
   updateMonthItemCategory: (recordId: string, section: MonthSection, itemId: string, category: ExpenseItem['category']) => void
   deleteMonthItem: (recordId: string, section: MonthSection, itemId: string) => void
+  setMonthAvailableBalance: (recordId: string, amount: number) => void
 
   // ── Gastos del negocio ──
   addBusinessExpense: (data: Omit<BusinessExpense, 'id'>) => void
@@ -280,6 +281,12 @@ export const useStore = create<AppState>()(
       deleteMonthItem: (recordId, section, itemId) => set(s => ({
         monthlyRecords: s.monthlyRecords.map(r =>
           r.id === recordId ? { ...r, [section]: r[section].filter(i => i.id !== itemId) } : r
+        )
+      })),
+
+      setMonthAvailableBalance: (recordId, amount) => set(s => ({
+        monthlyRecords: s.monthlyRecords.map(r =>
+          r.id === recordId ? { ...r, availableBalance_CLP: amount } : r
         )
       })),
 
