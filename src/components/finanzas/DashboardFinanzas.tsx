@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   TrendingDown, TrendingUp, CreditCard, PiggyBank,
-  Calendar, Wallet, ChevronDown, ChevronUp, Pencil, Check
+  Calendar, Wallet, ChevronDown, ChevronUp, Landmark
 } from 'lucide-react'
 import { useStore } from '../../store'
 import { useFmt } from '../../hooks/useExchangeRate'
@@ -38,7 +38,6 @@ function fullLabelYM(ym: string) {
 export function DashboardFinanzas() {
   const {
     monthlyRecords, debts, savings, debtInstallments,
-    settings, updateSettings,
   } = useStore()
   const { clp } = useFmt()
 
@@ -46,8 +45,6 @@ export function DashboardFinanzas() {
   const [catView, setCatView] = useState<'month' | 'year'>('month')
   const [catFilter, setCatFilter] = useState<string>('all')
   const [expandedCat, setExpandedCat] = useState<string | null>(null)
-  const [editingBalance, setEditingBalance] = useState(false)
-  const [balanceInput, setBalanceInput] = useState('')
 
   // Month selector options (last 12)
   const allMonths: string[] = []
@@ -90,7 +87,9 @@ export function DashboardFinanzas() {
   const projectedNeeds    = monthlyFixed + prevVariable + nextMonthInstallments
   const projectedFreeFlow = monthlyIncome - projectedNeeds
 
-  const availableBalance = settings.availableBalance_CLP ?? 0
+  // Saldo en cuentas desde el registro del mes seleccionado (accountBalances) + campo legacy
+  const accountBalances  = record?.accountBalances ?? []
+  const availableBalance = accountBalances.reduce((s, i) => s + i.amount_CLP, 0) + (record?.availableBalance_CLP ?? 0)
   const financialGap     = availableBalance - projectedNeeds
 
   // ── Gastos por categoría (desde monthlyRecords, NO expenseLogs) ──
@@ -136,11 +135,6 @@ export function DashboardFinanzas() {
 
   // ── Credit cards ──
   const creditCards = debts.filter(d => d.type === 'credit_card' && d.balance_CLP > 0)
-
-  function saveBalance() {
-    updateSettings({ availableBalance_CLP: parseFloat(balanceInput) || 0 })
-    setEditingBalance(false)
-  }
 
   // ── Render ──────────────────────────────────────────────────────
   return (
@@ -204,31 +198,27 @@ export function DashboardFinanzas() {
             <Calendar size={15} /> Proyección · {labelYM(nm)}
           </div>
 
-          {/* Saldo disponible */}
+          {/* Saldo disponible en cuentas (desde Ingresos & Gastos del mes) */}
           <div style={{ padding: '12px 14px', background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 14 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
-              Saldo disponible en cuenta hoy
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Landmark size={11} /> Saldo en cuentas · {record ? labelYM(record.yearMonth) : '—'}
             </div>
-            {editingBalance ? (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  className="input" type="number" autoFocus
-                  value={balanceInput} onChange={e => setBalanceInput(e.target.value)}
-                  placeholder="0" style={{ flex: 1, fontSize: 17, fontWeight: 700 }}
-                  onKeyDown={e => { if (e.key === 'Enter') saveBalance() }}
-                />
-                <button className="btn btn-primary" style={{ padding: '6px 10px' }} onClick={saveBalance}>
-                  <Check size={14} />
-                </button>
+            {accountBalances.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                Sin cuentas — agrégalas en <strong>Ingresos & Gastos</strong>
               </div>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
-                onClick={() => { setBalanceInput(String(availableBalance || '')); setEditingBalance(true) }}
-              >
-                <div style={{ fontSize: 21, fontWeight: 800, color: availableBalance > 0 ? '#16a34a' : 'var(--text-muted)', flex: 1 }}>
-                  {availableBalance > 0 ? clp(availableBalance) : 'Click para ingresar...'}
+              <div>
+                {accountBalances.map(acc => (
+                  <div key={acc.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
+                    <span style={{ color: 'var(--text-2)' }}>{acc.name}</span>
+                    <span style={{ fontWeight: 600, color: '#16a34a' }}>{clp(acc.amount_CLP)}</span>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 800, color: '#16a34a', paddingTop: 7, marginTop: 2 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>Total</span>
+                  <span>{clp(availableBalance)}</span>
                 </div>
-                <Pencil size={13} color="var(--text-muted)" />
               </div>
             )}
           </div>
