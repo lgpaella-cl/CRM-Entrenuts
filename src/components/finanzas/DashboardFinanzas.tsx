@@ -87,9 +87,9 @@ export function DashboardFinanzas() {
   const projectedNeeds    = monthlyFixed + prevVariable + nextMonthInstallments
   const projectedFreeFlow = monthlyIncome - projectedNeeds
 
-  // Saldo en cuentas desde el registro del mes seleccionado (accountBalances) + campo legacy
+  // Saldo en cuentas desde el registro del mes seleccionado (accountBalances)
   const accountBalances  = record?.accountBalances ?? []
-  const availableBalance = accountBalances.reduce((s, i) => s + i.amount_CLP, 0) + (record?.availableBalance_CLP ?? 0)
+  const availableBalance = accountBalances.reduce((s, i) => s + i.amount_CLP, 0)
   const financialGap     = availableBalance - projectedNeeds
 
   // ── Gastos por categoría (desde monthlyRecords, NO expenseLogs) ──
