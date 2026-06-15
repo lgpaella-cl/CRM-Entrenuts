@@ -434,7 +434,6 @@ export function MonthlyBalance() {
   const invest = record ? record.investments.reduce((s, i) => s + i.amount_CLP, 0) : 0
   const accountBalancesItems = record?.accountBalances ?? []
   const availableBalance = accountBalancesItems.reduce((s, i) => s + i.amount_CLP, 0)
-    + (record?.availableBalance_CLP ?? 0) // migración legacy
   const totalOut = fixed + variable + debtTotal + invest
   const freeBalance = availableBalance + income - totalOut
 
