@@ -109,7 +109,7 @@ interface AppState {
   deleteMonthlyRecord: (id: string) => void
   addMonthItem: (recordId: string, section: MonthSection, item: Omit<MonthLineItem, 'id'>) => void
   updateMonthItem: (recordId: string, section: MonthSection, itemId: string, name: string, amount: number) => void
-  updateMonthItemCategory: (recordId: string, section: MonthSection, itemId: string, category: ExpenseItem['category']) => void
+  updateMonthItemCategory: (recordId: string, section: MonthSection, itemId: string, category: string) => void
   deleteMonthItem: (recordId: string, section: MonthSection, itemId: string) => void
   setMonthAvailableBalance: (recordId: string, amount: number) => void
 
@@ -232,6 +232,7 @@ export const useStore = create<AppState>()(
           monthlyRecords: [...s.monthlyRecords, {
             id: uid(), yearMonth,
             incomes: [], fixedExpenses: [], variableExpenses: [], investments: [],
+            accountBalances: [],
             notes: '', createdAt: new Date().toISOString(),
           }]
         }))
@@ -248,6 +249,7 @@ export const useStore = create<AppState>()(
             fixedExpenses: source.fixedExpenses.map(i => ({ ...i, id: uid() })),
             variableExpenses: source.variableExpenses.map(i => ({ ...i, id: uid() })),
             investments: source.investments.map(i => ({ ...i, id: uid() })),
+            accountBalances: (source.accountBalances ?? []).map(i => ({ ...i, id: uid() })),
             notes: source.notes,
             createdAt: new Date().toISOString(),
           }]
@@ -258,14 +260,14 @@ export const useStore = create<AppState>()(
 
       addMonthItem: (recordId, section, item) => set(s => ({
         monthlyRecords: s.monthlyRecords.map(r =>
-          r.id === recordId ? { ...r, [section]: [...r[section], { ...item, id: uid() }] } : r
+          r.id === recordId ? { ...r, [section]: [...(r[section] ?? []), { ...item, id: uid() }] } : r
         )
       })),
 
       updateMonthItem: (recordId, section, itemId, name, amount) => set(s => ({
         monthlyRecords: s.monthlyRecords.map(r =>
           r.id === recordId
-            ? { ...r, [section]: r[section].map(i => i.id === itemId ? { ...i, name, amount_CLP: amount } : i) }
+            ? { ...r, [section]: (r[section] ?? []).map(i => i.id === itemId ? { ...i, name, amount_CLP: amount } : i) }
             : r
         )
       })),
@@ -273,14 +275,14 @@ export const useStore = create<AppState>()(
       updateMonthItemCategory: (recordId, section, itemId, category) => set(s => ({
         monthlyRecords: s.monthlyRecords.map(r =>
           r.id === recordId
-            ? { ...r, [section]: r[section].map(i => i.id === itemId ? { ...i, category } : i) }
+            ? { ...r, [section]: (r[section] ?? []).map(i => i.id === itemId ? { ...i, category } : i) }
             : r
         )
       })),
 
       deleteMonthItem: (recordId, section, itemId) => set(s => ({
         monthlyRecords: s.monthlyRecords.map(r =>
-          r.id === recordId ? { ...r, [section]: r[section].filter(i => i.id !== itemId) } : r
+          r.id === recordId ? { ...r, [section]: (r[section] ?? []).filter(i => i.id !== itemId) } : r
         )
       })),
 

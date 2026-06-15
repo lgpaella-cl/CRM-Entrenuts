@@ -5,8 +5,8 @@ import {
 } from 'lucide-react'
 import { useStore } from '../../store'
 import { useFmt } from '../../hooks/useExchangeRate'
-import type { MonthSection, MonthLineItem, MonthlyFinanceRecord, Debt, ExpenseItem } from '../../types'
-import { EXPENSE_CATEGORIES, getCatInfo } from '../../utils/categories'
+import type { MonthSection, MonthLineItem, MonthlyFinanceRecord, Debt } from '../../types'
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, getCatInfo, type FinanceCat } from '../../utils/categories'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
@@ -150,17 +150,18 @@ interface SectionPanelProps {
   items: MonthLineItem[]
   onAdd: (item: Omit<MonthLineItem, 'id'>) => void
   onUpdate: (itemId: string, name: string, amount: number) => void
-  onCategoryChange?: (itemId: string, category: ExpenseItem['category']) => void
+  onCategoryChange?: (itemId: string, category: string) => void
   onDelete: (itemId: string) => void
   clp: (n: number) => string
   sign?: 'positive' | 'negative'
   showCategory?: boolean
+  categories?: FinanceCat[]
 }
 
-function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onCategoryChange, onDelete, clp, sign = 'negative', showCategory = false }: SectionPanelProps) {
+function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onCategoryChange, onDelete, clp, sign = 'negative', showCategory = false, categories = EXPENSE_CATEGORIES }: SectionPanelProps) {
   const [newName, setNewName] = useState('')
   const [newAmount, setNewAmount] = useState('')
-  const [newCategory, setNewCategory] = useState<ExpenseItem['category']>('other')
+  const [newCategory, setNewCategory] = useState(categories[0]?.value ?? 'other')
   const [editId, setEditId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editAmount, setEditAmount] = useState('')
@@ -171,7 +172,7 @@ function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onCategor
     e.preventDefault()
     if (!newName.trim() || !newAmount) return
     onAdd({ name: newName.trim(), amount_CLP: parseFloat(newAmount) || 0, ...(showCategory ? { category: newCategory } : {}) })
-    setNewName(''); setNewAmount(''); setNewCategory('other')
+    setNewName(''); setNewAmount(''); setNewCategory(categories[0]?.value ?? 'other')
   }
 
   function startEdit(item: MonthLineItem) {
@@ -214,7 +215,7 @@ function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onCategor
                   {showCategory && onCategoryChange && (
                     <select
                       value={item.category ?? ''}
-                      onChange={e => onCategoryChange(item.id, e.target.value as ExpenseItem['category'])}
+                      onChange={e => onCategoryChange(item.id, e.target.value)}
                       title="Categoría"
                       style={{
                         border: 'none', background: 'transparent', fontSize: 16,
@@ -223,7 +224,7 @@ function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onCategor
                       }}
                     >
                       <option value="">—</option>
-                      {EXPENSE_CATEGORIES.map(c => (
+                      {categories.map(c => (
                         <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
                       ))}
                     </select>
@@ -250,8 +251,8 @@ function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onCategor
           <input className="input" placeholder="Nombre del ítem…" value={newName} onChange={e => setNewName(e.target.value)} style={{ flex: '2 1 140px' }} />
           <input className="input" type="number" min="0" placeholder="$ Monto" value={newAmount} onChange={e => setNewAmount(e.target.value)} style={{ flex: '1 1 100px' }} />
           {showCategory && (
-            <select className="input" value={newCategory} onChange={e => setNewCategory(e.target.value as ExpenseItem['category'])} style={{ flex: '1 1 130px' }}>
-              {EXPENSE_CATEGORIES.map(c => (
+            <select className="input" value={newCategory} onChange={e => setNewCategory(e.target.value)} style={{ flex: '1 1 130px' }}>
+              {categories.map(c => (
                 <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
               ))}
             </select>
@@ -380,13 +381,11 @@ function AnnualView({ records, debts, clp, year }: AnnualViewProps) {
 // ── Main component ───────────────────────────────────────────────────────────
 
 export function MonthlyBalance() {
-  const { monthlyRecords, addMonthlyRecord, copyMonthlyRecord, deleteMonthlyRecord, addMonthItem, updateMonthItem, updateMonthItemCategory, deleteMonthItem, setMonthAvailableBalance, debts, savings } = useStore()
+  const { monthlyRecords, addMonthlyRecord, copyMonthlyRecord, deleteMonthlyRecord, addMonthItem, updateMonthItem, updateMonthItemCategory, deleteMonthItem, debts, savings } = useStore()
   const { clp } = useFmt()
 
   const [selectedMonth, setSelectedMonth] = useState(currentYM())
   const [showAnnual, setShowAnnual] = useState(false)
-  const [editingBalance, setEditingBalance] = useState(false)
-  const [balanceInput, setBalanceInput] = useState('')
 
   const months = last13Months()
   const record = monthlyRecords.find(r => r.yearMonth === selectedMonth)
@@ -400,7 +399,9 @@ export function MonthlyBalance() {
   const fixed = record ? record.fixedExpenses.reduce((s, i) => s + i.amount_CLP, 0) : 0
   const variable = record ? record.variableExpenses.reduce((s, i) => s + i.amount_CLP, 0) : 0
   const invest = record ? record.investments.reduce((s, i) => s + i.amount_CLP, 0) : 0
-  const availableBalance = record?.availableBalance_CLP ?? 0
+  const accountBalancesItems = record?.accountBalances ?? []
+  const availableBalance = accountBalancesItems.reduce((s, i) => s + i.amount_CLP, 0)
+    + (record?.availableBalance_CLP ?? 0) // migración legacy
   const totalOut = fixed + variable + debtTotal + invest
   const freeBalance = availableBalance + income - totalOut
 
@@ -408,7 +409,7 @@ export function MonthlyBalance() {
     return {
       onAdd:           (item: Omit<MonthLineItem, 'id'>) => { if (record) addMonthItem(record.id, section, item) },
       onUpdate:        (itemId: string, name: string, amount: number) => { if (record) updateMonthItem(record.id, section, itemId, name, amount) },
-      onCategoryChange:(itemId: string, category: ExpenseItem['category']) => { if (record) updateMonthItemCategory(record.id, section, itemId, category) },
+      onCategoryChange:(itemId: string, category: string) => { if (record) updateMonthItemCategory(record.id, section, itemId, category) },
       onDelete:        (itemId: string) => { if (record) deleteMonthItem(record.id, section, itemId) },
     }
   }
@@ -512,6 +513,8 @@ export function MonthlyBalance() {
                   items={record.incomes}
                   clp={clp}
                   sign="positive"
+                  showCategory
+                  categories={INCOME_CATEGORIES}
                   {...makeHandlers('incomes')}
                 />
                 <SectionPanel
@@ -575,57 +578,15 @@ export function MonthlyBalance() {
                   {...makeHandlers('investments')}
                 />
 
-                {/* Saldo Cuenta Disponible */}
-                <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden', marginBottom: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                  <div style={{ background: '#0f766e', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'white', fontWeight: 600, fontSize: 14 }}>
-                      <Wallet size={15} /> Saldo Cuenta Disponible
-                    </div>
-                    <span style={{ color: 'rgba(255,255,255,0.95)', fontWeight: 700, fontSize: 15 }}>
-                      {clp(availableBalance)}
-                    </span>
-                  </div>
-                  <div style={{ padding: '14px 20px' }}>
-                    <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px' }}>
-                      Saldo que tienes en cuenta para cubrir gastos de este mes. Se suma al flujo del balance.
-                    </p>
-                    {editingBalance ? (
-                      <form
-                        onSubmit={e => {
-                          e.preventDefault()
-                          setMonthAvailableBalance(record.id, parseFloat(balanceInput) || 0)
-                          setEditingBalance(false)
-                        }}
-                        style={{ display: 'flex', gap: 8 }}
-                      >
-                        <input
-                          className="input"
-                          type="number"
-                          min="0"
-                          autoFocus
-                          value={balanceInput}
-                          onChange={e => setBalanceInput(e.target.value)}
-                          placeholder="Ej: 500000"
-                          style={{ flex: 1 }}
-                        />
-                        <button type="submit" className="btn btn-success" style={{ padding: '7px 12px' }}>
-                          <Check size={13} />
-                        </button>
-                        <button type="button" className="btn btn-secondary" style={{ padding: '7px 12px' }} onClick={() => setEditingBalance(false)}>
-                          <X size={13} />
-                        </button>
-                      </form>
-                    ) : (
-                      <button
-                        className="btn btn-secondary"
-                        style={{ width: '100%', justifyContent: 'center', fontSize: 13 }}
-                        onClick={() => { setBalanceInput(availableBalance > 0 ? String(availableBalance) : ''); setEditingBalance(true) }}
-                      >
-                        <Pencil size={13} /> {availableBalance > 0 ? `Actualizar saldo (${clp(availableBalance)})` : 'Ingresar saldo en cuenta'}
-                      </button>
-                    )}
-                  </div>
-                </div>
+                <SectionPanel
+                  title="Saldo Cuentas Disponibles"
+                  icon={<Wallet size={15} />}
+                  headerBg="#0f766e"
+                  items={record.accountBalances ?? []}
+                  clp={clp}
+                  sign="positive"
+                  {...makeHandlers('accountBalances')}
+                />
               </div>
 
               {/* ── Derecha: balance + recomendaciones ── */}

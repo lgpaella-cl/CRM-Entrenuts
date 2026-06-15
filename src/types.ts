@@ -154,10 +154,10 @@ export interface MonthLineItem {
   id: string
   name: string
   amount_CLP: number
-  category?: ExpenseItem['category']   // opcional — para gastos fijos y variables
+  category?: string   // flexible — categoría de gasto o ingreso
 }
 
-export type MonthSection = 'incomes' | 'fixedExpenses' | 'variableExpenses' | 'investments'
+export type MonthSection = 'incomes' | 'fixedExpenses' | 'variableExpenses' | 'investments' | 'accountBalances'
 
 export interface MonthlyFinanceRecord {
   id: string
@@ -166,7 +166,8 @@ export interface MonthlyFinanceRecord {
   fixedExpenses: MonthLineItem[]
   variableExpenses: MonthLineItem[]
   investments: MonthLineItem[]
-  availableBalance_CLP?: number   // saldo en cuenta al cierre del mes
+  accountBalances: MonthLineItem[]   // saldos por cuenta bancaria (reemplaza availableBalance_CLP)
+  availableBalance_CLP?: number      // legacy — migrado a accountBalances
   notes: string
   createdAt: string
 }
