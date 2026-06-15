@@ -163,37 +163,38 @@ export function SavingsTab() {
                   {s.notes && <p className="text-xs text-gray-400 mt-2 border-t border-gray-50 pt-2">{s.notes}</p>}
 
                   {/* Botones de movimiento rápido */}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}>
                     <button
                       className="btn btn-success"
-                      style={{ flex: 1, justifyContent: 'center', fontSize: 12, fontWeight: 600 }}
+                      style={{ fontSize: 11, padding: '4px 10px', fontWeight: 600, opacity: isQuickOpen && quickType === 'deposit' ? 0.7 : 1 }}
                       onClick={() => isQuickOpen && quickType === 'deposit' ? setQuickId(null) : openQuick(s.id, 'deposit')}
                     >
-                      <ArrowDownCircle size={14} /> Depositar
+                      <ArrowDownCircle size={12} /> Depositar
                     </button>
                     <button
                       style={{
-                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                        padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                        fontSize: 12, fontWeight: 600,
-                        background: isQuickOpen && quickType === 'withdrawal' ? '#fecaca' : '#fee2e2',
-                        color: '#dc2626',
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                        fontSize: 11, fontWeight: 600,
+                        background: '#fee2e2', color: '#dc2626',
+                        opacity: isQuickOpen && quickType === 'withdrawal' ? 0.7 : 1,
                       }}
                       onClick={() => isQuickOpen && quickType === 'withdrawal' ? setQuickId(null) : openQuick(s.id, 'withdrawal')}
                     >
-                      <ArrowUpCircle size={14} /> Retirar
+                      <ArrowUpCircle size={12} /> Retirar
                     </button>
                     <button
                       className="btn btn-secondary"
-                      style={{ padding: '8px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+                      style={{ padding: '4px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto' }}
                       onClick={() => setExpandedId(isExpanded ? null : s.id)}
                     >
                       {txList.length > 0 && (
-                        <span style={{ background: '#e2e8f0', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>
+                        <span style={{ background: '#e2e8f0', borderRadius: 9999, padding: '0 5px', fontSize: 10, fontWeight: 700 }}>
                           {txList.length}
                         </span>
                       )}
-                      {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      Movimientos
+                      {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                     </button>
                   </div>
                 </div>
