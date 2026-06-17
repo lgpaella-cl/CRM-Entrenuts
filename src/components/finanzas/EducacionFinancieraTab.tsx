@@ -30,6 +30,13 @@ function fv(pv: number, pmt: number, r: number, n: number) {
   return pv * Math.pow(1 + r, n) + pmt * ((Math.pow(1 + r, n) - 1) / r)
 }
 
+function monthsUntil(ym: string): number | null {
+  if (!ym) return null
+  const [y, m] = ym.split('-').map(Number)
+  const now = new Date()
+  return (y - now.getFullYear()) * 12 + (m - now.getMonth() - 1)
+}
+
 // ── Score calculation ────────────────────────────────────────────────────────
 
 interface ScoreResult {
@@ -551,13 +558,6 @@ function MetasModule({ profile }: { profile: ReturnType<typeof buildFinancialPro
     setForm({ name: '', type: 'freedom', targetAmount_CLP: '', targetDate: '', notes: '' })
   }
 
-  function monthsUntil(ym: string) {
-    if (!ym) return null
-    const [y, m] = ym.split('-').map(Number)
-    const now = new Date()
-    return (y - now.getFullYear()) * 12 + (m - now.getMonth() - 1)
-  }
-
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
@@ -654,11 +654,11 @@ function MetasModule({ profile }: { profile: ReturnType<typeof buildFinancialPro
 
 function CoachModule({ profile }: { profile: ReturnType<typeof buildFinancialProfile> }) {
   const { clp } = useFmt()
-  const { summary, recentMonths } = profile
+  const { summary, recentMonths, goals } = profile
 
+  // ── Insights ────────────────────────────────────────────────────────────────
   const insights: { icon: string; type: 'success' | 'warning' | 'danger' | 'info'; title: string; text: string }[] = []
 
-  // Tasa de ahorro
   if (summary.savingsRate >= 20) {
     insights.push({ icon: '🏆', type: 'success', title: 'Tasa de ahorro excelente', text: `Estás invirtiendo el ${summary.savingsRate.toFixed(1)}% de tus ingresos. Mantén esta disciplina — el interés compuesto hará el resto del trabajo.` })
   } else if (summary.savingsRate >= 10) {
@@ -667,21 +667,18 @@ function CoachModule({ profile }: { profile: ReturnType<typeof buildFinancialPro
     insights.push({ icon: '⚠️', type: 'warning', title: 'Tasa de ahorro por debajo del mínimo', text: `Tu tasa actual es ${summary.savingsRate.toFixed(1)}%. Reducir el gasto variable en ${clp(summary.monthlyIncome * 0.1 - summary.monthlyInvestments)} mensuales te llevaría al 10% mínimo recomendado.` })
   }
 
-  // Fondo de emergencia
   if (summary.emergencyFundMonths < 1) {
     insights.push({ icon: '🚨', type: 'danger', title: 'Sin fondo de emergencia', text: 'No tienes respaldo ante una pérdida de ingresos o emergencia médica. Prioriza acumular al menos 1 mes de gastos antes de cualquier inversión no esencial.' })
   } else if (summary.emergencyFundMonths < 3) {
     insights.push({ icon: '🛡️', type: 'warning', title: 'Fondo de emergencia insuficiente', text: `Tu fondo cubre ${summary.emergencyFundMonths.toFixed(1)} meses. Destina el 50% de tu margen libre a reforzarlo hasta alcanzar los 3 meses mínimos (${clp(summary.monthlyExpenses * 3)}).` })
   }
 
-  // Endeudamiento
   if (summary.debtRatio > 2) {
     insights.push({ icon: '🔴', type: 'danger', title: 'Nivel de deuda elevado', text: `Tu deuda (${clp(summary.totalLiabilities)}) es ${summary.debtRatio.toFixed(1)}x tu ingreso anual. Considera el método avalancha: paga el mínimo en todo y destina el excedente a la deuda con mayor tasa.` })
   } else if (summary.debtRatio > 1) {
     insights.push({ icon: '⚡', type: 'warning', title: 'Deuda moderada — actúa ahora', text: `Con ${clp(summary.totalLiabilities)} en pasivos, acelerar los pagos hoy puede ahorrarte años de intereses. Revisa si puedes refinanciar a menor tasa.` })
   }
 
-  // Evolución mensual de gastos variables
   if (recentMonths.length >= 2) {
     const last = recentMonths[0], prev = recentMonths[1]
     const varChange = last.variable - prev.variable
@@ -693,23 +690,158 @@ function CoachModule({ profile }: { profile: ReturnType<typeof buildFinancialPro
     }
   }
 
-  // Potencial de incremento de inversión
   if (summary.monthlyIncome > 0 && summary.savingsRate < 20) {
-    const targetInvestment = summary.monthlyIncome * 0.20
-    const additionalNeeded = targetInvestment - summary.monthlyInvestments
+    const additionalNeeded = summary.monthlyIncome * 0.20 - summary.monthlyInvestments
     if (additionalNeeded > 0) {
       const in20y = fv(0, additionalNeeded * 12, 0.07, 20)
       insights.push({ icon: '💡', type: 'info', title: 'Oportunidad de crecimiento patrimonial', text: `Si inviertes ${clp(additionalNeeded)} mensuales adicionales para llegar al 20%, en 20 años habrías acumulado ${clp(in20y)} extra (asumiendo 7% anual).` })
     }
   }
 
-  // Patrimonio neto negativo
   if (summary.netWorth < 0) {
     insights.push({ icon: '🚨', type: 'danger', title: 'Patrimonio neto negativo', text: `Tus deudas (${clp(summary.totalLiabilities)}) superan tus activos (${clp(summary.totalAssets)}). Prioriza reducir pasivos antes de cualquier otro objetivo.` })
   }
 
   if (insights.length === 0) {
     insights.push({ icon: '💡', type: 'info', title: 'Agrega datos para ver insights', text: 'El Coach IA analiza tus ingresos, gastos, deudas e inversiones para generar recomendaciones personalizadas. Completa tu balance mensual para activarlo.' })
+  }
+
+  // ── Recomendaciones personalizadas ──────────────────────────────────────────
+  interface Recom {
+    priority: 'ahora' | 'pronto' | 'después'
+    icon: string
+    title: string
+    qué: string
+    porqué: string
+    plazo: string
+  }
+  const recomendaciones: Recom[] = []
+
+  // Prioridad 1 — fundamentos críticos
+  if (summary.emergencyFundMonths < 1 && summary.monthlyExpenses > 0) {
+    recomendaciones.push({
+      priority: 'ahora', icon: '🛡️',
+      title: 'Construye tu colchón de seguridad primero',
+      qué: `Abre una cuenta de ahorro separada y deposita ${clp(summary.monthlyExpenses)} este mes para tener al menos 1 mes de respaldo. Hazlo automático: programa una transferencia el día de tu pago.`,
+      porqué: 'Sin este respaldo, cualquier imprevisto (enfermedad, reparación, pérdida de empleo) puede obligarte a endeudarte para sobrevivir, reiniciando todo tu progreso financiero.',
+      plazo: 'Empezar este mes',
+    })
+  }
+
+  if (summary.debtRatio > 2.5) {
+    recomendaciones.push({
+      priority: 'ahora', icon: '🔥',
+      title: 'Ataca la deuda más cara primero',
+      qué: `Lista todas tus deudas de mayor a menor tasa de interés. Paga el mínimo en todas excepto en la más cara — ahí concentra todo el dinero extra que puedas. Tu deuda actual es ${clp(summary.totalLiabilities)}.`,
+      porqué: 'A tasas altas (sobre 1,5% mensual), el interés acumulado puede superar el capital. Cada mes de retraso hace la deuda más difícil de pagar. Esto es prioridad antes que cualquier inversión.',
+      plazo: 'Inmediato',
+    })
+  }
+
+  // Prioridad 2 — estabilización
+  if (summary.emergencyFundMonths >= 1 && summary.emergencyFundMonths < 3) {
+    const faltante = summary.monthlyExpenses * 3 - (summary.emergencyFundMonths * summary.monthlyExpenses)
+    recomendaciones.push({
+      priority: 'pronto', icon: '🛡️',
+      title: 'Completa el fondo de emergencia a 3 meses',
+      qué: `Te faltan ${clp(faltante)} para llegar a 3 meses de cobertura. Destina el 40-50% de lo que puedas ahorrar cada mes a este objetivo hasta completarlo. No lo mezcles con otros ahorros.`,
+      porqué: '3 meses es el mínimo para sobrevivir una pérdida de empleo típica sin endeudarte. Por debajo de eso, eres vulnerable a cualquier imprevisto.',
+      plazo: '3 a 6 meses',
+    })
+  }
+
+  if (summary.savingsRate < 10 && summary.monthlyIncome > 0) {
+    const falta = Math.max(0, summary.monthlyIncome * 0.10 - summary.monthlyInvestments)
+    recomendaciones.push({
+      priority: 'pronto', icon: '📈',
+      title: 'Lleva tu tasa de ahorro al 10% mínimo',
+      qué: `Necesitas invertir ${clp(falta)} mensuales adicionales para llegar al 10%. No intentes llegar de golpe: sube un 2% este mes, otro 2% el próximo. Revisa tus gastos variables (comidas fuera, suscripciones, ocio) — ahí suele estar el margen.`,
+      porqué: 'Con menos del 10% de ahorro es casi imposible construir riqueza porque la inflación va más rápido que lo que acumulas. El 10% es el umbral mínimo para que el interés compuesto trabaje a tu favor.',
+      plazo: '3 a 6 meses',
+    })
+  }
+
+  if (summary.debtRatio > 1 && summary.debtRatio <= 2.5) {
+    recomendaciones.push({
+      priority: 'pronto', icon: '⚖️',
+      title: 'Acelera el pago de deuda mientras puedas',
+      qué: `Tu deuda es ${summary.debtRatio.toFixed(1)}x tu ingreso anual (${clp(summary.totalLiabilities)}). Si tienes cualquier excedente mensual, destina el 50% a pagar deuda anticipadamente. También puedes explorar refinanciar a menor tasa.`,
+      porqué: 'La deuda actúa como un interés negativo: mientras más lento la pagas, más dinero pierde. Reducirla te libera flujo de caja que puedes redirigir a inversión.',
+      plazo: '6 a 12 meses',
+    })
+  }
+
+  // Metas personales
+  goals.forEach(goal => {
+    const months = monthsUntil(goal.targetDate)
+    if (!months || months <= 0) return
+    const remaining = Math.max(0, goal.targetAmount_CLP - summary.netWorth)
+    const monthlyNeeded = remaining / months
+    const typeInfo = GOAL_TYPES.find(t => t.value === goal.type)
+
+    if (remaining <= 0) {
+      recomendaciones.push({
+        priority: 'después', icon: typeInfo?.emoji ?? '🎯',
+        title: `¡Meta "${goal.name}" alcanzada!`,
+        qué: `Tu patrimonio actual (${clp(summary.netWorth)}) ya supera tu objetivo de ${clp(goal.targetAmount_CLP)}. Considera actualizar la meta o establecer una más ambiciosa.`,
+        porqué: 'Las metas cumplidas merecen reconocimiento. Revisarlas regularmente mantiene la motivación y el foco.',
+        plazo: 'Revisar ahora',
+      })
+    } else if (monthlyNeeded > summary.monthlyInvestments * 1.5) {
+      recomendaciones.push({
+        priority: 'pronto', icon: typeInfo?.emoji ?? '🎯',
+        title: `Meta "${goal.name}": el ritmo no alcanza`,
+        qué: `Para llegar a ${clp(goal.targetAmount_CLP)} en ${months} meses necesitas ahorrar ${clp(monthlyNeeded)}/mes. Hoy inviertes ${clp(summary.monthlyInvestments)}/mes. Opciones: aumentar el ahorro, extender el plazo, o ajustar el monto objetivo.`,
+        porqué: 'Una meta sin el ritmo adecuado genera frustración. Es mejor ajustar el plan ahora que descubrir en el último momento que era inalcanzable.',
+        plazo: `${months} meses para la meta`,
+      })
+    } else if (monthlyNeeded <= summary.monthlyInvestments) {
+      recomendaciones.push({
+        priority: 'después', icon: typeInfo?.emoji ?? '🎯',
+        title: `"${goal.name}": vas bien encaminado`,
+        qué: `Con tu ritmo actual de ${clp(summary.monthlyInvestments)}/mes estás cubriendo lo necesario (${clp(monthlyNeeded)}/mes) para alcanzar ${clp(goal.targetAmount_CLP)}. Mantén la constancia y no toques ese dinero.`,
+        porqué: 'La consistencia a largo plazo supera cualquier estrategia compleja. El secreto es no interrumpir el proceso.',
+        plazo: `Meta en ${months} meses`,
+      })
+    }
+  })
+
+  // Prioridad 3 — crecimiento y optimización
+  if (summary.savingsRate >= 10 && summary.savingsRate < 20 && summary.emergencyFundMonths >= 3) {
+    const extra = Math.max(0, summary.monthlyIncome * 0.20 - summary.monthlyInvestments)
+    recomendaciones.push({
+      priority: 'después', icon: '🚀',
+      title: 'Sube del 10% al 20% de tasa de ahorro',
+      qué: `Estás en buen ritmo. El siguiente nivel es llegar al 20%, lo que requiere ${clp(extra)} mensuales adicionales. Revisa si hay gastos que puedas optimizar: suscripciones que no usas, comidas fuera de casa, compras impulsivas.`,
+      porqué: 'Pasar del 10% al 20% puede recortar tu camino a la independencia financiera casi a la mitad. Es el salto más impactante que puedes hacer.',
+      plazo: '6 a 12 meses',
+    })
+  }
+
+  if (summary.savingsRate >= 20 && summary.emergencyFundMonths >= 6 && summary.debtRatio < 1) {
+    recomendaciones.push({
+      priority: 'después', icon: '🌍',
+      title: 'Diversifica tu portafolio de inversiones',
+      qué: 'Tienes una base muy sólida. El próximo paso es asegurarte de que tu inversión esté diversificada: parte en renta fija (depósitos, bonos), parte en renta variable (ETFs globales) y parte en activos reales. Considera un APV si no tienes.',
+      porqué: 'La diversificación reduce el riesgo sin sacrificar retorno. Si toda tu inversión está en un solo instrumento o institución, un evento adverso puede afectar todo tu patrimonio.',
+      plazo: 'Progresivo',
+    })
+  }
+
+  if (goals.length === 0 && summary.monthlyIncome > 0) {
+    recomendaciones.push({
+      priority: 'pronto', icon: '🎯',
+      title: 'Define tus metas financieras',
+      qué: 'Ve al módulo "Metas" y escribe al menos 1-2 objetivos financieros concretos: ¿quieres comprar casa, jubilarte antes, crear un negocio, pagar tus estudios? Ponle fecha y monto.',
+      porqué: 'Sin una meta clara, el ahorro se siente como un sacrificio sin sentido y es fácil abandonarlo. Una meta concreta convierte el ahorro en progreso visible hacia algo que te importa.',
+      plazo: 'Esta semana',
+    })
+  }
+
+  const priorityStyle = {
+    ahora:   { bg: '#fef2f2', border: '#ef4444', badge: '#dc2626', badgeBg: '#fee2e2', label: 'HACER AHORA' },
+    pronto:  { bg: '#fffbeb', border: '#f59e0b', badge: '#d97706', badgeBg: '#fef9c3', label: 'PRÓXIMOS MESES' },
+    después: { bg: '#f0fdf4', border: '#22c55e', badge: '#16a34a', badgeBg: '#dcfce7', label: 'DESPUÉS' },
   }
 
   const styleMap = {
@@ -726,22 +858,72 @@ function CoachModule({ profile }: { profile: ReturnType<typeof buildFinancialPro
         <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>Análisis automático de tu situación financiera con recomendaciones personalizadas</p>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+      {/* Insights */}
+      <p style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>📡 Diagnóstico en tiempo real</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 28 }}>
         {insights.map((ins, i) => {
           const s = styleMap[ins.type]
           return (
-            <div key={i} style={{ background: s.bg, borderLeft: `4px solid ${s.border}`, borderRadius: '0 12px 12px 0', padding: '14px 18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                <span style={{ fontSize: 16 }}>{ins.icon}</span>
+            <div key={i} style={{ background: s.bg, borderLeft: `4px solid ${s.border}`, borderRadius: '0 12px 12px 0', padding: '12px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 15 }}>{ins.icon}</span>
                 <span style={{ fontWeight: 700, fontSize: 13, color: s.title }}>{ins.title}</span>
               </div>
-              <p style={{ margin: 0, fontSize: 13, color: '#475569', lineHeight: 1.6 }}>{ins.text}</p>
+              <p style={{ margin: 0, fontSize: 12, color: '#475569', lineHeight: 1.6 }}>{ins.text}</p>
             </div>
           )
         })}
       </div>
 
-      {/* Sección para conectar Claude API */}
+      {/* Recomendaciones */}
+      <p style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>🎯 Recomendaciones personalizadas</p>
+      {recomendaciones.length === 0 ? (
+        <div className="card" style={{ padding: '28px 20px', textAlign: 'center', color: '#94a3b8', marginBottom: 24 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: '#64748b', margin: '0 0 6px' }}>Agrega datos para ver recomendaciones</p>
+          <p style={{ fontSize: 12, margin: 0 }}>Registra tus ingresos, gastos y metas para que el Coach genere un plan de acción personalizado.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28 }}>
+          {(['ahora', 'pronto', 'después'] as const).map(p => {
+            const items = recomendaciones.filter(r => r.priority === p)
+            if (items.length === 0) return null
+            const ps = priorityStyle[p]
+            return (
+              <div key={p}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 20, background: ps.badgeBg, color: ps.badge, letterSpacing: '0.06em' }}>{ps.label}</span>
+                  <div style={{ flex: 1, height: 1, background: '#f1f5f9' }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {items.map((r, i) => (
+                    <div key={i} style={{ background: ps.bg, border: `1px solid ${ps.border}22`, borderLeft: `4px solid ${ps.border}`, borderRadius: '0 14px 14px 0', padding: '16px 18px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <span style={{ fontSize: 18 }}>{r.icon}</span>
+                        <span style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>{r.title}</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <div style={{ background: 'white', borderRadius: 8, padding: '10px 12px' }}>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Qué hacer</p>
+                          <p style={{ fontSize: 12, color: '#334155', lineHeight: 1.6, margin: 0 }}>{r.qué}</p>
+                        </div>
+                        <div style={{ background: 'white', borderRadius: 8, padding: '10px 12px' }}>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Por qué importa</p>
+                          <p style={{ fontSize: 12, color: '#334155', lineHeight: 1.6, margin: 0 }}>{r.porqué}</p>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 10, color: ps.badge, fontWeight: 700 }}>⏱ {r.plazo}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Conectar Claude API */}
       <div style={{ background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', borderRadius: 14, padding: 24, color: 'white' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <Sparkles size={20} style={{ color: '#818cf8' }} />
@@ -904,14 +1086,54 @@ function IndicadoresModule({ profile, score, savingsCount }: { profile: ReturnTy
   const libertadPct = capitalNeeded > 0 ? Math.min(100, (summary.netWorth / capitalNeeded) * 100) : 0
 
   const indicators = [
-    { title: 'Patrimonio Neto', value: clp(summary.netWorth), icon: '🏛️', color: summary.netWorth >= 0 ? '#16a34a' : '#dc2626', desc: 'Activos − Pasivos' },
-    { title: 'Ahorro mensual', value: clp(summary.monthlyInvestments), icon: '💰', color: '#2563eb', desc: 'Inversión este mes' },
-    { title: 'Tasa de ahorro', value: `${summary.savingsRate.toFixed(1)}%`, icon: '📊', color: summary.savingsRate >= 20 ? '#16a34a' : summary.savingsRate >= 10 ? '#d97706' : '#dc2626', desc: 'Inversión / Ingreso' },
-    { title: 'Fondo emergencia', value: `${summary.emergencyFundMonths.toFixed(1)} meses`, icon: '🛡️', color: summary.emergencyFundMonths >= 3 ? '#16a34a' : '#d97706', desc: 'Cobertura de gastos' },
-    { title: 'Ratio de deuda', value: `${summary.debtRatio.toFixed(2)}x`, icon: '⚖️', color: summary.debtRatio < 1 ? '#16a34a' : summary.debtRatio < 2 ? '#d97706' : '#dc2626', desc: 'Deuda / Ingreso anual' },
-    { title: 'Score financiero', value: `${score}/100`, icon: '🎯', color: score >= 70 ? '#16a34a' : score >= 40 ? '#d97706' : '#dc2626', desc: 'Salud financiera global' },
-    { title: 'Libertad financiera', value: `${libertadPct.toFixed(1)}%`, icon: '🏝️', color: '#7c3aed', desc: 'Avance vs meta 4%' },
-    { title: 'Total activos', value: clp(summary.totalAssets), icon: '📈', color: '#0ea5e9', desc: `${savingsCount} cuenta${savingsCount !== 1 ? 's' : ''}` },
+    {
+      title: 'Patrimonio Neto', value: clp(summary.netWorth), icon: '🏛️',
+      color: summary.netWorth >= 0 ? '#16a34a' : '#dc2626',
+      desc: 'Activos − Pasivos',
+      explain: 'Es lo que te quedaría si vendieras todo lo que tienes y pagaras todas tus deudas. Si es positivo y crece cada mes, vas en la dirección correcta. Si es negativo, debes más de lo que tienes.',
+    },
+    {
+      title: 'Ahorro mensual', value: clp(summary.monthlyInvestments), icon: '💰',
+      color: '#2563eb',
+      desc: 'Inversión este mes',
+      explain: 'Cuánto dinero destinaste este mes a inversiones o ahorros. Cada peso que colocas aquí trabaja para tu futuro sin que tengas que hacer nada más. Entre más alto, más rápido creces.',
+    },
+    {
+      title: 'Tasa de ahorro', value: `${summary.savingsRate.toFixed(1)}%`, icon: '📊',
+      color: summary.savingsRate >= 20 ? '#16a34a' : summary.savingsRate >= 10 ? '#d97706' : '#dc2626',
+      desc: 'Inversión / Ingreso',
+      explain: 'De cada $100 que ganas, cuántos van al futuro. Menos del 10% hace muy difícil construir riqueza. Entre 10-20% es buen ritmo. Sobre el 20% es excelente — ahí el interés compuesto trabaja de verdad.',
+    },
+    {
+      title: 'Fondo emergencia', value: `${summary.emergencyFundMonths.toFixed(1)} meses`, icon: '🛡️',
+      color: summary.emergencyFundMonths >= 3 ? '#16a34a' : summary.emergencyFundMonths >= 1 ? '#d97706' : '#dc2626',
+      desc: 'Meses de gastos cubiertos',
+      explain: 'Cuánto tiempo podrías mantener tu estilo de vida si mañana perdieras tus ingresos. Menos de 3 meses es zona de riesgo. Entre 3-6 meses es lo recomendado. Más de 6 meses: bien protegido.',
+    },
+    {
+      title: 'Ratio de deuda', value: `${summary.debtRatio.toFixed(2)}x`, icon: '⚖️',
+      color: summary.debtRatio < 1 ? '#16a34a' : summary.debtRatio < 2 ? '#d97706' : '#dc2626',
+      desc: 'Deuda total / Ingreso anual',
+      explain: 'Cuántas veces tu deuda total supera lo que ganas en un año. Menos de 1x es saludable: podrías pagar toda tu deuda en menos de un año si fuera necesario. Más de 2x empieza a ser preocupante.',
+    },
+    {
+      title: 'Score financiero', value: `${score}/100`, icon: '🎯',
+      color: score >= 70 ? '#16a34a' : score >= 40 ? '#d97706' : '#dc2626',
+      desc: 'Nota global de salud financiera',
+      explain: 'Una calificación que resume en un número qué tan ordenadas están tus finanzas. Considera tu ahorro, tus deudas, tu fondo de emergencia y tus inversiones. Sobre 70 es sólido; bajo 40 requiere atención.',
+    },
+    {
+      title: 'Libertad financiera', value: `${libertadPct.toFixed(1)}%`, icon: '🏝️',
+      color: '#7c3aed',
+      desc: 'Avance hacia independencia',
+      explain: 'Cuánto del camino recorriste hacia el punto donde tus inversiones generan suficiente para vivir sin trabajar. Al 100% alcanzas la independencia financiera — tus activos pagan tus gastos solos.',
+    },
+    {
+      title: 'Total activos', value: clp(summary.totalAssets), icon: '📈',
+      color: '#0ea5e9',
+      desc: `${savingsCount} cuenta${savingsCount !== 1 ? 's' : ''} registradas`,
+      explain: 'La suma de todo lo que tienes valorado en dinero: cuentas de ahorro, inversiones, APV, fondos mutuos, etc. Este número debería ir creciendo mes a mes gracias a tus aportes y a la rentabilidad.',
+    },
   ]
 
   const chartData = profile.recentMonths.slice(0, 6).reverse().map(r => ({
@@ -927,13 +1149,18 @@ function IndicadoresModule({ profile, score, savingsCount }: { profile: ReturnTy
         <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>📊 Panel de Indicadores</h3>
         <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>Todos tus KPIs financieros en tiempo real</p>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 16 }}>
         {indicators.map(ind => (
-          <div key={ind.title} className="stat-card" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 24, marginBottom: 6 }}>{ind.icon}</div>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginBottom: 4 }}>{ind.title}</div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: ind.color }}>{ind.value}</div>
-            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{ind.desc}</div>
+          <div key={ind.title} className="card" style={{ padding: '16px 18px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            <div style={{ fontSize: 28, flexShrink: 0, lineHeight: 1 }}>{ind.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2, gap: 8 }}>
+                <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{ind.title}</span>
+                <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{ind.desc}</span>
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: ind.color, marginBottom: 8 }}>{ind.value}</div>
+              <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6, borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>{ind.explain}</div>
+            </div>
           </div>
         ))}
       </div>
