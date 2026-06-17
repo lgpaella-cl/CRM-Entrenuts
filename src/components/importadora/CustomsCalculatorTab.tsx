@@ -7,6 +7,24 @@ import { useFmt } from '../../hooks/useExchangeRate'
 
 function n(val: string): number { return parseFloat(val) || 0 }
 
+function InputCell({ value, onChange, placeholder }: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
+  return (
+    <input
+      className="input"
+      type="text"
+      inputMode="decimal"
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder ?? '0'}
+      style={{ textAlign: 'right', fontWeight: 500 }}
+    />
+  )
+}
+
 function Row({ label, value, computed, children, note }: {
   label: string
   value?: string
@@ -87,25 +105,6 @@ export function CustomsCalculatorTab() {
   const costoPorPallet = n(cantidadPallets) > 0 ? totalImportacionCLP / n(cantidadPallets) : 0
   const costoPorUnidad = n(cantidadUnidades) > 0 ? totalImportacionCLP / n(cantidadUnidades) : 0
 
-  function InputCell({ value, onChange, placeholder }: {
-    value: string
-    onChange: (v: string) => void
-    placeholder?: string
-  }) {
-    return (
-      <input
-        className="input"
-        type="number"
-        min="0"
-        step="any"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder ?? '0'}
-        style={{ textAlign: 'right', fontWeight: 500 }}
-      />
-    )
-  }
-
   return (
     <div style={{ maxWidth: 860 }}>
       {/* Header */}
@@ -135,9 +134,8 @@ export function CustomsCalculatorTab() {
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input
               className="input"
-              type="number"
-              min="0"
-              step="1"
+              type="text"
+              inputMode="numeric"
               value={tipoCambio}
               onChange={e => setTipoCambio(e.target.value)}
               style={{ textAlign: 'right', fontWeight: 600 }}
