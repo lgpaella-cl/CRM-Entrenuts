@@ -132,6 +132,24 @@ export interface SavingsItem {
   notes?: string
 }
 
+export interface FinancialGoal {
+  id: string
+  name: string
+  type: 'freedom' | 'house' | 'retirement' | 'business' | 'education' | 'vehicle' | 'other'
+  targetAmount_CLP: number
+  targetDate: string   // "2030-06"
+  notes?: string
+}
+
+export interface SavingsTransaction {
+  id: string
+  savingsItemId: string
+  type: 'deposit' | 'withdrawal'
+  amount_CLP: number
+  date: string      // "2026-06-15"
+  notes?: string
+}
+
 // ── Finanzas del Negocio ────────────────────────────────────────
 
 export interface BusinessExpense {

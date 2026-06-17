@@ -17,17 +17,18 @@ import { DebtsTab } from './components/finanzas/DebtsTab'
 import { SavingsTab } from './components/finanzas/SavingsTab'
 // ExpenseLogTab removed — data lives in monthlyRecords now
 import { CashflowProjection } from './components/finanzas/CashflowProjection'
+import { EducacionFinancieraTab } from './components/finanzas/EducacionFinancieraTab'
 import {
   BarChart2, Package, MapPin, Grid3X3, TrendingUp, TrendingDown,
   CreditCard, PiggyBank, LineChart, Building2, Wallet,
   Download, Upload, DollarSign, Moon, Sun, Bell, Search, X,
-  ClipboardList, LayoutDashboard, Menu, Calculator
+  ClipboardList, LayoutDashboard, Menu, Calculator, Lightbulb
 } from 'lucide-react'
 import './index.css'
 
 type MainTab = 'importadora' | 'finanzas'
 type ImportadoraSubTab = 'dashboard' | 'products' | 'stores' | 'inventory' | 'sales' | 'projection' | 'bizfinance' | 'orders' | 'pdvanalysis' | 'customs'
-type FinanzasSubTab = 'dashboard' | 'incomes' | 'debts' | 'savings' | 'projection'
+type FinanzasSubTab = 'dashboard' | 'incomes' | 'debts' | 'savings' | 'projection' | 'educacion'
 
 const importadoraTabs: { id: ImportadoraSubTab; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard', label: 'Resumen', icon: <BarChart2 size={15} /> },
@@ -48,6 +49,7 @@ const finanzasTabs: { id: FinanzasSubTab; label: string; icon: React.ReactNode }
   { id: 'debts', label: 'Deudas', icon: <CreditCard size={15} /> },
   { id: 'savings', label: 'Ahorros & Inversiones', icon: <PiggyBank size={15} /> },
   { id: 'projection', label: 'Flujo 5 años', icon: <LineChart size={15} /> },
+  { id: 'educacion', label: 'Educación Financiera', icon: <Lightbulb size={15} /> },
 ]
 
 const STORE_KEY = 'crm-importadora-v1'
@@ -445,6 +447,7 @@ export default function App() {
               {finanzasTab === 'debts' && <DebtsTab />}
               {finanzasTab === 'savings' && <SavingsTab />}
               {finanzasTab === 'projection' && <CashflowProjection />}
+              {finanzasTab === 'educacion' && <EducacionFinancieraTab />}
             </>
           )}
         </main>

@@ -2,9 +2,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type {
   Product, Store, StockEntry, SaleRecord, PurchaseOrder,
-  IncomeItem, ExpenseItem, ExpenseLog, Debt, SavingsItem, ExchangeRate,
+  IncomeItem, ExpenseItem, ExpenseLog, Debt, SavingsItem, SavingsTransaction, ExchangeRate,
   MonthLineItem, MonthSection, MonthlyFinanceRecord, BusinessExpense, DebtInstallment,
-  AppSettings
+  AppSettings, FinancialGoal
 } from './types'
 
 
@@ -41,6 +41,7 @@ interface AppState {
   expenseLogs: ExpenseLog[]
   debts: Debt[]
   savings: SavingsItem[]
+  savingsTransactions: SavingsTransaction[]
 
   // Tipo de cambio
   exchangeRate: ExchangeRate | null
@@ -53,6 +54,12 @@ interface AppState {
 
   // Cuotas de deudas
   debtInstallments: DebtInstallment[]
+
+  // Metas financieras
+  financialGoals: FinancialGoal[]
+  addFinancialGoal: (g: Omit<FinancialGoal, 'id'>) => void
+  updateFinancialGoal: (id: string, g: Partial<Omit<FinancialGoal, 'id'>>) => void
+  deleteFinancialGoal: (id: string) => void
 
   // ── Productos ──
   addProduct: (data: Omit<Product, 'id' | 'sku' | 'createdAt' | 'updatedAt'>) => void
@@ -99,6 +106,8 @@ interface AppState {
   addSavings: (data: Omit<SavingsItem, 'id'>) => void
   updateSavings: (id: string, data: Partial<SavingsItem>) => void
   deleteSavings: (id: string) => void
+  addSavingsTransaction: (data: Omit<SavingsTransaction, 'id'>) => void
+  deleteSavingsTransaction: (id: string) => void
 
   // ── Tipo de cambio ──
   setExchangeRate: (rate: ExchangeRate) => void
@@ -141,10 +150,12 @@ export const useStore = create<AppState>()(
       expenseLogs: [],
       debts: [],
       savings: [],
+      savingsTransactions: [],
       exchangeRate: null,
       monthlyRecords: [],
       businessExpenses: [],
       debtInstallments: [],
+      financialGoals: [],
 
       // Settings
       updateSettings: (data) => set(s => ({ settings: { ...s.settings, ...data } })),
@@ -220,7 +231,35 @@ export const useStore = create<AppState>()(
       // Ahorros
       addSavings: (data) => set(s => ({ savings: [...s.savings, { ...data, id: uid() }] })),
       updateSavings: (id, data) => set(s => ({ savings: s.savings.map(sv => sv.id === id ? { ...sv, ...data } : sv) })),
-      deleteSavings: (id) => set(s => ({ savings: s.savings.filter(sv => sv.id !== id) })),
+      deleteSavings: (id) => set(s => ({
+        savings: s.savings.filter(sv => sv.id !== id),
+        savingsTransactions: s.savingsTransactions.filter(t => t.savingsItemId !== id),
+      })),
+      addSavingsTransaction: (data) => set(s => {
+        const tx: SavingsTransaction = { ...data, id: uid() }
+        const delta = data.type === 'deposit' ? data.amount_CLP : -data.amount_CLP
+        return {
+          savingsTransactions: [...s.savingsTransactions, tx],
+          savings: s.savings.map(sv =>
+            sv.id === data.savingsItemId
+              ? { ...sv, balance_CLP: Math.max(0, sv.balance_CLP + delta) }
+              : sv
+          ),
+        }
+      }),
+      deleteSavingsTransaction: (id) => set(s => {
+        const tx = s.savingsTransactions.find(t => t.id === id)
+        if (!tx) return {}
+        const delta = tx.type === 'deposit' ? -tx.amount_CLP : tx.amount_CLP
+        return {
+          savingsTransactions: s.savingsTransactions.filter(t => t.id !== id),
+          savings: s.savings.map(sv =>
+            sv.id === tx.savingsItemId
+              ? { ...sv, balance_CLP: Math.max(0, sv.balance_CLP + delta) }
+              : sv
+          ),
+        }
+      }),
 
       // Tipo de cambio
       setExchangeRate: (rate) => set({ exchangeRate: rate }),
@@ -328,6 +367,11 @@ export const useStore = create<AppState>()(
       deleteDebtInstallments: (debtId) => set(s => ({
         debtInstallments: s.debtInstallments.filter(i => i.debtId !== debtId)
       })),
+
+      // Metas financieras
+      addFinancialGoal: (g) => set(s => ({ financialGoals: [...s.financialGoals, { ...g, id: uid() }] })),
+      updateFinancialGoal: (id, g) => set(s => ({ financialGoals: s.financialGoals.map(fg => fg.id === id ? { ...fg, ...g } : fg) })),
+      deleteFinancialGoal: (id) => set(s => ({ financialGoals: s.financialGoals.filter(fg => fg.id !== id) })),
 
       receiveStock: (productId, storeId, qty) => set(s => {
         const existing = s.stock.find(e => e.productId === productId && e.storeId === storeId)
