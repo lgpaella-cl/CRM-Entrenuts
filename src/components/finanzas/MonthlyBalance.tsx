@@ -173,6 +173,7 @@ interface SectionPanelProps {
   onAdd: (item: Omit<MonthLineItem, 'id'>) => void
   onUpdate: (itemId: string, name: string, amount: number) => void
   onCategoryChange?: (itemId: string, category: string) => void
+  onTogglePaid: (itemId: string) => void
   onDelete: (itemId: string) => void
   clp: (n: number) => string
   sign?: 'positive' | 'negative'
@@ -180,7 +181,7 @@ interface SectionPanelProps {
   categories?: FinanceCat[]
 }
 
-function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onCategoryChange, onDelete, clp, sign = 'negative', showCategory = false, categories = EXPENSE_CATEGORIES }: SectionPanelProps) {
+function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onCategoryChange, onTogglePaid, onDelete, clp, sign = 'negative', showCategory = false, categories = EXPENSE_CATEGORIES }: SectionPanelProps) {
   const [newName, setNewName] = useState('')
   const [newAmount, setNewAmount] = useState('')
   const [newCategory, setNewCategory] = useState(categories[0]?.value ?? 'other')
@@ -234,6 +235,19 @@ function SectionPanel({ title, icon, headerBg, items, onAdd, onUpdate, onCategor
                 </>
               ) : (
                 <>
+                  <button
+                    onClick={() => onTogglePaid(item.id)}
+                    title={item.paid ? 'Marcar como pendiente' : 'Marcar como pagado/realizado'}
+                    style={{
+                      width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                      border: item.paid ? '1.5px solid #22c55e' : '1.5px solid #cbd5e1',
+                      background: item.paid ? '#22c55e' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', padding: 0, transition: 'all 0.15s',
+                    }}
+                  >
+                    {item.paid && <Check size={12} color="white" strokeWidth={3} />}
+                  </button>
                   {showCategory && onCategoryChange && (
                     <select
                       value={item.category ?? ''}
@@ -403,7 +417,7 @@ function AnnualView({ records, debts, clp, year }: AnnualViewProps) {
 // ── Main component ───────────────────────────────────────────────────────────
 
 export function MonthlyBalance() {
-  const { monthlyRecords, addMonthlyRecord, copyMonthlyRecord, deleteMonthlyRecord, addMonthItem, updateMonthItem, updateMonthItemCategory, deleteMonthItem, debts, savings } = useStore()
+  const { monthlyRecords, addMonthlyRecord, copyMonthlyRecord, deleteMonthlyRecord, addMonthItem, updateMonthItem, updateMonthItemCategory, toggleMonthItemPaid, deleteMonthItem, debts, savings } = useStore()
   const { clp } = useFmt()
 
   const [selectedMonth, setSelectedMonth] = useState(currentYM())
@@ -442,6 +456,7 @@ export function MonthlyBalance() {
       onAdd:           (item: Omit<MonthLineItem, 'id'>) => { if (record) addMonthItem(record.id, section, item) },
       onUpdate:        (itemId: string, name: string, amount: number) => { if (record) updateMonthItem(record.id, section, itemId, name, amount) },
       onCategoryChange:(itemId: string, category: string) => { if (record) updateMonthItemCategory(record.id, section, itemId, category) },
+      onTogglePaid:    (itemId: string) => { if (record) toggleMonthItemPaid(record.id, section, itemId) },
       onDelete:        (itemId: string) => { if (record) deleteMonthItem(record.id, section, itemId) },
     }
   }

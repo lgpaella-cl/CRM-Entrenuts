@@ -119,6 +119,7 @@ interface AppState {
   addMonthItem: (recordId: string, section: MonthSection, item: Omit<MonthLineItem, 'id'>) => void
   updateMonthItem: (recordId: string, section: MonthSection, itemId: string, name: string, amount: number) => void
   updateMonthItemCategory: (recordId: string, section: MonthSection, itemId: string, category: string) => void
+  toggleMonthItemPaid: (recordId: string, section: MonthSection, itemId: string) => void
   deleteMonthItem: (recordId: string, section: MonthSection, itemId: string) => void
   setMonthAvailableBalance: (recordId: string, amount: number) => void
 
@@ -315,6 +316,14 @@ export const useStore = create<AppState>()(
         monthlyRecords: s.monthlyRecords.map(r =>
           r.id === recordId
             ? { ...r, [section]: (r[section] ?? []).map(i => i.id === itemId ? { ...i, category } : i) }
+            : r
+        )
+      })),
+
+      toggleMonthItemPaid: (recordId, section, itemId) => set(s => ({
+        monthlyRecords: s.monthlyRecords.map(r =>
+          r.id === recordId
+            ? { ...r, [section]: (r[section] ?? []).map(i => i.id === itemId ? { ...i, paid: !i.paid } : i) }
             : r
         )
       })),

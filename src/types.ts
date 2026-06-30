@@ -173,6 +173,7 @@ export interface MonthLineItem {
   name: string
   amount_CLP: number
   category?: string   // flexible — categoría de gasto o ingreso
+  paid?: boolean       // marcador visual: pagado/realizado
 }
 
 export type MonthSection = 'incomes' | 'fixedExpenses' | 'variableExpenses' | 'investments' | 'accountBalances'
