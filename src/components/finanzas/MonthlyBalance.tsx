@@ -417,7 +417,7 @@ function AnnualView({ records, debts, clp, year }: AnnualViewProps) {
 // ── Main component ───────────────────────────────────────────────────────────
 
 export function MonthlyBalance() {
-  const { monthlyRecords, addMonthlyRecord, copyMonthlyRecord, deleteMonthlyRecord, addMonthItem, updateMonthItem, updateMonthItemCategory, toggleMonthItemPaid, deleteMonthItem, debts, savings } = useStore()
+  const { monthlyRecords, addMonthlyRecord, copyMonthlyRecord, deleteMonthlyRecord, addMonthItem, updateMonthItem, updateMonthItemCategory, toggleMonthItemPaid, deleteMonthItem, debts, debtInstallments, toggleInstallmentPaid, savings } = useStore()
   const { clp } = useFmt()
 
   const [selectedMonth, setSelectedMonth] = useState(currentYM())
@@ -617,13 +617,32 @@ export function MonthlyBalance() {
                     {activeDebts.length === 0 ? (
                       <p style={{ color: '#94a3b8', fontSize: 13 }}>Sin cuotas activas en {monthLabel(selectedMonth, true)}. {debts.length > 0 ? 'Hay deudas registradas que aún no comienzan o ya terminaron.' : 'Agrégalas en la pestaña "Deudas".'}</p>
                     ) : (
-                      activeDebts.map(d => (
-                        <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
-                          <span style={{ flex: 2, fontSize: 13, color: '#334155' }}>{d.name}</span>
-                          <span style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>{d.institution}</span>
-                          <span style={{ fontWeight: 600, fontSize: 13, color: '#7c3aed' }}>{clp(d.monthlyPayment_CLP)}</span>
-                        </div>
-                      ))
+                      activeDebts.map(d => {
+                        const monthInstallment = debtInstallments.find(i => i.debtId === d.id && i.dueDate.slice(0, 7) === selectedMonth)
+                        return (
+                          <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
+                            <button
+                              onClick={() => monthInstallment && toggleInstallmentPaid(monthInstallment.id)}
+                              disabled={!monthInstallment}
+                              title={!monthInstallment ? 'Esta deuda no tiene sistema de cuotas' : monthInstallment.paid ? 'Marcar como pendiente' : 'Marcar como pagada'}
+                              style={{
+                                width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                                border: monthInstallment?.paid ? '1.5px solid #22c55e' : '1.5px solid #cbd5e1',
+                                background: monthInstallment?.paid ? '#22c55e' : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: monthInstallment ? 'pointer' : 'not-allowed',
+                                opacity: monthInstallment ? 1 : 0.4,
+                                padding: 0, transition: 'all 0.15s',
+                              }}
+                            >
+                              {monthInstallment?.paid && <Check size={12} color="white" strokeWidth={3} />}
+                            </button>
+                            <span style={{ flex: 2, fontSize: 13, color: '#334155' }}>{d.name}</span>
+                            <span style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>{d.institution}</span>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: '#7c3aed' }}>{clp(d.monthlyPayment_CLP)}</span>
+                          </div>
+                        )
+                      })
                     )}
                     {debts.length > activeDebts.length && activeDebts.length > 0 && (
                       <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>
